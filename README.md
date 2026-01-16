@@ -6,6 +6,7 @@ A Visual Studio Code extension for analyzing AL object ID range usage in Busines
 
 - **Object Range Overview**: Scans all AL projects in your workspace and displays used object IDs organized by app and object type
 - **Unused ID Detection**: Shows gaps in your configured ID ranges so you can easily find available IDs for new objects
+- **IntelliSense ID Suggestions**: Get automatic suggestions for the next available object ID when typing AL object declarations (see [IntelliSense ID Suggestions](#intellisense-id-suggestions))
 - **Multi-Project Support**: Works with multi-root workspaces containing multiple AL apps
 - **Shared Range Mode**: Special mode for OnPrem scenarios where multiple apps share the same ID range (see [Shared Range Mode](#shared-range-mode))
 - **Conflict Detection**: Identifies when the same object type + ID is used in multiple projects
@@ -20,6 +21,7 @@ A Visual Studio Code extension for analyzing AL object ID range usage in Busines
 - [Supported Object Types](#supported-object-types)
 - [Getting Started](#getting-started)
 - [Views](#views)
+- [IntelliSense ID Suggestions](#intellisense-id-suggestions)
 - [Commands](#commands)
 - [Configuration](#configuration)
 - [Normal Mode vs Shared Range Mode](#normal-mode-vs-shared-range-mode)
@@ -102,6 +104,66 @@ Shows available ID ranges within your configured `idRanges`:
 
 - **Click on any gap** to copy the first ID in that range to your clipboard
 - Shows how many IDs are available in each gap
+
+---
+
+## IntelliSense ID Suggestions
+
+The extension provides automatic IntelliSense completions that suggest the next available object ID when you're creating new AL objects.
+
+### How It Works
+
+1. Start typing an AL object declaration (e.g., `codeunit`, `table`, `page`)
+2. Press `Space` after the object type keyword, or trigger IntelliSense manually with `Ctrl+Space`
+3. The extension suggests the next available ID from your configured ranges
+
+### Example
+
+```al
+codeunit |  ← Press Space or Ctrl+Space here
+```
+
+You'll see a completion item like:
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 50003                                               │
+│ Next available codeunit ID                          │
+│ Project: My Extension                               │
+└─────────────────────────────────────────────────────┘
+```
+
+Select the suggestion to insert the ID directly into your code.
+
+### Supported Object Types
+
+IntelliSense suggestions work for all 13 object types that require IDs:
+
+- `table`, `tableextension`
+- `page`, `pageextension`
+- `report`, `reportextension`
+- `codeunit`
+- `query`
+- `xmlport`
+- `enum`, `enumextension`
+- `permissionset`, `permissionsetextension`
+
+> **Note:** Object types that don't require IDs (`interface`, `controladdin`, `profile`, `pagecustomization`, `entitlement`, `dotnet`) do not trigger ID suggestions.
+
+### Normal Mode vs Shared Mode
+
+| Mode        | Behavior                                                                            |
+| ----------- | ----------------------------------------------------------------------------------- |
+| Normal Mode | Suggests the next available ID from the **current project's** ID ranges             |
+| Shared Mode | Suggests the next available ID for the **specific object type** across all projects |
+
+In **shared mode**, the suggested ID is type-specific because different object types can share the same ID number, but the same type + ID combination must be unique across all projects.
+
+### Edge Cases
+
+- **No project detected**: If the file is not within a known AL project, no suggestion is shown
+- **No available IDs**: If all IDs in the configured ranges are used, a warning message is shown instead
+- **Nested projects**: If projects are nested, the most specific (deepest) project is used
 
 ---
 
@@ -503,6 +565,15 @@ To configure `sharedRangeMode`:
 ---
 
 ## Release Notes
+
+### 0.3.0
+
+- **NEW:** IntelliSense ID Suggestions - Automatic completion suggestions for the next available object ID when typing AL object declarations
+  - Triggers on space after object type keyword or with manual IntelliSense (`Ctrl+Space`)
+  - Works in both normal mode and shared mode
+  - Supports all 13 object types that require IDs
+- **IMPROVED:** Extension now activates on `onLanguage:al` for immediate IntelliSense support
+- **IMPROVED:** Project detection prefers the most specific project for nested paths
 
 ### 0.2.0
 

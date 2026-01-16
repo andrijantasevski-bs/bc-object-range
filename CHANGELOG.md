@@ -2,6 +2,25 @@
 
 All notable changes to the "BC Object Range Analyzer" extension will be documented in this file.
 
+## [0.3.0] - 2026-01-16
+
+### Added
+
+- **IntelliSense ID Suggestions**: Automatic completion suggestions for the next available object ID when typing AL object declarations
+  - Triggers on space after typing an object type keyword (e.g., `codeunit `, `table `, `page `)
+  - Also works with manual IntelliSense trigger (`Ctrl+Space`)
+  - Supports all 13 object types that require IDs
+  - Works in both **normal mode** (project-specific) and **shared mode** (type-specific across projects)
+  - Shows helpful documentation with the suggested ID, object type, and project/mode information
+  - Displays a warning when no IDs are available in the configured ranges
+- Extension now activates on `onLanguage:al` for immediate IntelliSense support when editing AL files
+
+### Improved
+
+- Project detection now prefers the most specific (deepest) project when files are in nested project paths
+- Fixed flaky test for command registration in VS Code test environment
+- Fixed integration test for nested multi-line comments to align with AL language behavior
+
 ## [0.2.0] - 2026-01-16
 
 ### Added
