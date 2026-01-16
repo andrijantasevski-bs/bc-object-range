@@ -121,12 +121,12 @@ Available from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 
 Open VS Code Settings (`Ctrl+,`) and search for "bcObjectRange":
 
-| Setting                          | Type    | Default     | Description                                                   |
-| -------------------------------- | ------- | ----------- | ------------------------------------------------------------- |
-| `bcObjectRange.autoRefresh`      | boolean | `true`      | Automatically refresh when `.al` files change                 |
-| `bcObjectRange.autoRefreshDelay` | number  | `300`       | Delay in milliseconds before auto-refresh triggers (100-2000) |
-| `bcObjectRange.excludePatterns`  | array   | (see below) | Glob patterns to exclude from scanning                        |
-| `bcObjectRange.sharedRangeMode`  | boolean | `false`     | Enable shared range mode for multi-app scenarios (see below)  |
+| Setting                          | Type    | Default     | Scope    | Description                                                   |
+| -------------------------------- | ------- | ----------- | -------- | ------------------------------------------------------------- |
+| `bcObjectRange.autoRefresh`      | boolean | `true`      | Resource | Automatically refresh when `.al` files change                 |
+| `bcObjectRange.autoRefreshDelay` | number  | `300`       | Resource | Delay in milliseconds before auto-refresh triggers (100-2000) |
+| `bcObjectRange.excludePatterns`  | array   | (see below) | Resource | Glob patterns to exclude from scanning                        |
+| `bcObjectRange.sharedRangeMode`  | boolean | `false`     | Window   | Enable shared range mode for multi-app scenarios (see below)  |
 
 **Default exclude patterns:**
 
@@ -134,7 +134,41 @@ Open VS Code Settings (`Ctrl+,`) and search for "bcObjectRange":
 ["**/node_modules/**", "**/.altestrunner/**", "**/.alpackages/**"]
 ```
 
-### Example settings.json
+### Setting Scopes Explained
+
+- **Resource scope** (`autoRefresh`, `autoRefreshDelay`, `excludePatterns`): Can be configured per workspace folder. In a multi-root workspace, you can set different values for each folder.
+- **Window scope** (`sharedRangeMode`): Applies to the entire VS Code window/workspace. This setting must be configured at the workspace level (`.code-workspace` file) or user level, not in individual folder `.vscode/settings.json` files.
+
+> **Note:** The `sharedRangeMode` setting is window-scoped because it conceptually applies to all projects in the workspace simultaneously—it determines whether projects share ID ranges across the entire workspace.
+
+### Where to Configure Settings
+
+| Location                                  | Resource-scoped settings | Window-scoped settings |
+| ----------------------------------------- | ------------------------ | ---------------------- |
+| User settings (`settings.json`)           | ✅ Yes                   | ✅ Yes                 |
+| Workspace settings (`.code-workspace`)    | ✅ Yes                   | ✅ Yes                 |
+| Folder settings (`.vscode/settings.json`) | ✅ Yes                   | ❌ No                  |
+
+### Example: Workspace Settings (`.code-workspace` file)
+
+For multi-root workspaces, configure settings in your `.code-workspace` file:
+
+```json
+{
+  "folders": [
+    { "path": "core-app" },
+    { "path": "sales-app" },
+    { "path": "inventory-app" }
+  ],
+  "settings": {
+    "bcObjectRange.sharedRangeMode": true,
+    "bcObjectRange.autoRefresh": true,
+    "bcObjectRange.autoRefreshDelay": 500
+  }
+}
+```
+
+### Example: User/Workspace settings.json
 
 ```json
 {
@@ -441,6 +475,16 @@ If `sales-app` accidentally creates `table 50000` (same as `core-app`):
 2. Change the object ID in one of the apps to an unused ID
 3. The conflict will disappear after the next refresh
 
+### Q: Why can't I set `sharedRangeMode` in my folder's settings.json?
+
+**A:** The `sharedRangeMode` setting has **window scope**, which means it applies to the entire VS Code window and cannot be set per-folder. This is by design because shared range mode is a workspace-wide concept that affects how all projects are analyzed together.
+
+To configure `sharedRangeMode`:
+
+- **Multi-root workspace**: Add it to your `.code-workspace` file under `"settings"`
+- **Single folder**: Add it to your user settings or the folder's `.vscode/settings.json`
+- **User-wide**: Add it to your VS Code user settings
+
 ### Q: Can I use this with AL:Go?
 
 **A:** Yes! The extension works with any AL project structure. It scans based on `app.json` files and `.al` file content.
@@ -459,6 +503,13 @@ If `sales-app` accidentally creates `table 50000` (same as `core-app`):
 ---
 
 ## Release Notes
+
+### 0.2.0
+
+- **IMPROVED:** Settings now have proper scopes for multi-root workspace support
+  - `autoRefresh`, `autoRefreshDelay`, `excludePatterns`: Resource scope (per-folder)
+  - `sharedRangeMode`: Window scope (workspace-wide)
+- **IMPROVED:** Documentation updated with setting scope explanations
 
 ### 0.1.0
 
