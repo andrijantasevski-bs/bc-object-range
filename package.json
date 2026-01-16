@@ -127,6 +127,15 @@
             "type": "string"
           }
         },
+        "bcObjectRange.excludeFolders": {
+          "type": "array",
+          "default": [],
+          "scope": "resource",
+          "description": "Folder names to exclude from scanning. Use this to exclude entire workspace root folders by name (e.g., ['TestApp', 'DemoProject']). This is simpler than excludePatterns for excluding workspace folders.",
+          "items": {
+            "type": "string"
+          }
+        },
         "bcObjectRange.sharedRangeMode": {
           "type": "boolean",
           "default": false,
@@ -160,6 +169,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
+    "minimatch": "^10.1.1",
     "zod": "^3.22.4"
   }
 }

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
+import { minimatch } from "minimatch";
 import {
   ALProject,
   ALObject,
@@ -30,10 +31,15 @@ export class WorkspaceScanner {
     // Find all app.json files in the workspace
     const appJsonFiles = await vscode.workspace.findFiles(
       "**/app.json",
-      this.getExcludePattern()
+      this.getExcludePattern(),
     );
 
     for (const appJsonUri of appJsonFiles) {
+      // Check if this project should be excluded based on its path
+      if (this.shouldExcludeProject(appJsonUri.fsPath)) {
+        continue;
+      }
+
       const project = await this.scanProject(appJsonUri);
       if (project) {
         projects.push(project);
@@ -47,6 +53,57 @@ export class WorkspaceScanner {
   }
 
   /**
+   * Determine if a project should be excluded based on its file path.
+   * This handles both excludePatterns (glob patterns) and excludeFolders (folder names)
+   * and properly excludes workspace root folders that vscode.workspace.findFiles cannot.
+   *
+   * @param projectPath - The absolute path to the app.json file or project root
+   * @returns true if the project should be excluded, false otherwise
+   */
+  public shouldExcludeProject(projectPath: string): boolean {
+    const config = vscode.workspace.getConfiguration("bcObjectRange");
+
+    // Normalize path for consistent matching (use forward slashes)
+    const normalizedPath = projectPath.replace(/\\/g, "/");
+
+    // Check excludeFolders (simple folder name matching)
+    const excludeFolders = config.get<string[]>("excludeFolders", []);
+    if (excludeFolders.length > 0) {
+      // Get all path segments
+      const pathSegments = normalizedPath
+        .split("/")
+        .filter((s) => s.length > 0);
+
+      for (const folderName of excludeFolders) {
+        // Check if any segment matches the folder name (case-insensitive on Windows)
+        const normalizedFolderName = folderName.toLowerCase();
+        if (
+          pathSegments.some(
+            (segment) => segment.toLowerCase() === normalizedFolderName,
+          )
+        ) {
+          return true;
+        }
+      }
+    }
+
+    // Check excludePatterns (glob pattern matching against full path)
+    const excludePatterns = config.get<string[]>("excludePatterns", [
+      "**/node_modules/**",
+      "**/.altestrunner/**",
+      "**/.alpackages/**",
+    ]);
+
+    for (const pattern of excludePatterns) {
+      if (minimatch(normalizedPath, pattern, { dot: true, nocase: true })) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Scan a single AL project given its app.json URI
    */
   private async scanProject(appJsonUri: vscode.Uri): Promise<ALProject | null> {
@@ -54,7 +111,7 @@ export class WorkspaceScanner {
       // Read and parse app.json
       const appJsonContent = await vscode.workspace.fs.readFile(appJsonUri);
       const appJson = parseAppJson(
-        Buffer.from(appJsonContent).toString("utf-8")
+        Buffer.from(appJsonContent).toString("utf-8"),
       );
 
       if (!appJson) {
@@ -95,11 +152,11 @@ export class WorkspaceScanner {
    * Find all .al files within a project directory
    */
   private async findALFilesInProject(
-    projectRoot: string
+    projectRoot: string,
   ): Promise<vscode.Uri[]> {
     // Create a relative pattern for this specific project
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(
-      vscode.Uri.file(projectRoot)
+      vscode.Uri.file(projectRoot),
     );
     if (!workspaceFolder) {
       return [];
@@ -109,7 +166,7 @@ export class WorkspaceScanner {
     const pattern = relativePath
       ? new vscode.RelativePattern(
           workspaceFolder,
-          `${relativePath.replace(/\\/g, "/")}/**/*.al`
+          `${relativePath.replace(/\\/g, "/")}/**/*.al`,
         )
       : new vscode.RelativePattern(workspaceFolder, "**/*.al");
 
@@ -160,7 +217,7 @@ export class WorkspaceScanner {
    * Calculate unused ID gaps within configured ranges for a project
    */
   public calculateGaps(
-    project: ALProject
+    project: ALProject,
   ): { start: number; end: number; count: number }[] {
     const gaps: { start: number; end: number; count: number }[] = [];
 
@@ -259,7 +316,7 @@ export class WorkspaceScanner {
    */
   public calculateSharedGaps(
     projects: ALProject[],
-    objectType: ALObjectTypeWithId
+    objectType: ALObjectTypeWithId,
   ): SharedIdGap[] {
     const gaps: SharedIdGap[] = [];
     const sharedRanges = this.getSharedRanges(projects);
@@ -319,7 +376,7 @@ export class WorkspaceScanner {
    */
   public getNextAvailableIdForType(
     projects: ALProject[],
-    objectType: ALObjectTypeWithId
+    objectType: ALObjectTypeWithId,
   ): number | null {
     const gaps = this.calculateSharedGaps(projects, objectType);
     if (gaps.length === 0) {
@@ -351,7 +408,7 @@ export class WorkspaceScanner {
       if (objects.length > 1) {
         // Check if objects are from different projects (by file path)
         const uniquePaths = new Set(
-          objects.map((o) => path.dirname(o.filePath))
+          objects.map((o) => path.dirname(o.filePath)),
         );
         if (uniquePaths.size > 1) {
           conflicts.push({

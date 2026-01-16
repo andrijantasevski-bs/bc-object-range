@@ -2,6 +2,24 @@
 
 All notable changes to the "BC Object Range Analyzer" extension will be documented in this file.
 
+## [0.5.0] - 2026-01-16
+
+### Added
+
+- **`excludeFolders` setting**: Simple folder name exclusion for workspace root folders
+  - Matches folder names anywhere in the path (case-insensitive)
+  - Ideal for excluding workspace root folders added via "Add Folder to Workspace"
+  - Simpler alternative to glob patterns for common use cases
+  - Example: `"bcObjectRange.excludeFolders": ["App_FaultyItems", "TestApps"]`
+
+### Improved
+
+- **`excludePatterns` now works for workspace root folders** via post-filtering
+  - Added `minimatch` dependency for reliable glob pattern matching
+  - Patterns are matched against the full absolute path, not just relative paths
+  - This fixes the issue where patterns like `**/App_FaultyItems/**` didn't exclude workspace root folders
+- Comprehensive documentation for exclusion settings with examples and troubleshooting
+
 ## [0.4.3] - 2026-01-16
 
 ### Added

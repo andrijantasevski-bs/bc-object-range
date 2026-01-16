@@ -188,12 +188,351 @@ Open VS Code Settings (`Ctrl+,`) and search for "bcObjectRange":
 | `bcObjectRange.autoRefresh`      | boolean | `true`      | Resource | Automatically refresh when `.al` files change                 |
 | `bcObjectRange.autoRefreshDelay` | number  | `300`       | Resource | Delay in milliseconds before auto-refresh triggers (100-2000) |
 | `bcObjectRange.excludePatterns`  | array   | (see below) | Resource | Glob patterns to exclude from scanning                        |
+| `bcObjectRange.excludeFolders`   | array   | `[]`        | Resource | Folder names to exclude (simple alternative to glob patterns) |
 | `bcObjectRange.sharedRangeMode`  | boolean | `false`     | Window   | Enable shared range mode for multi-app scenarios (see below)  |
 
 **Default exclude patterns:**
 
 ```json
 ["**/node_modules/**", "**/.altestrunner/**", "**/.alpackages/**"]
+```
+
+### Excluding Projects from Analysis
+
+The extension provides two complementary ways to exclude projects from being analyzed:
+
+1. **`excludeFolders`** — Simple folder name matching (recommended for workspace root folders)
+2. **`excludePatterns`** — Glob patterns for more complex exclusion rules
+
+#### excludeFolders Setting (Recommended for Workspace Root Folders)
+
+The `bcObjectRange.excludeFolders` setting provides a simple way to exclude projects by folder name. This is **the recommended approach** for excluding workspace root folders (folders added via "Add Folder to Workspace").
+
+**Why use `excludeFolders`?**
+
+When you add a folder to your workspace using "Add Folder to Workspace", VS Code treats it as a workspace root. The `excludePatterns` glob patterns are evaluated _relative to each workspace root_, which means patterns like `**/App_FaultyItems/**` won't match the folder itself—only subfolders with that name.
+
+The `excludeFolders` setting solves this by matching folder names directly anywhere in the path.
+
+**Example:**
+
+```json
+{
+  "bcObjectRange.excludeFolders": ["App_FaultyItems", "TestApps", "Archive"]
+}
+```
+
+This will exclude any project whose path contains folders named `App_FaultyItems`, `TestApps`, or `Archive`.
+
+**Key characteristics:**
+
+- ✅ Matches folder names **anywhere in the path** (root or nested)
+- ✅ **Case-insensitive** matching
+- ✅ Matches **exact folder names only** (not partial matches)
+- ✅ Works with workspace root folders
+- ✅ Simple and intuitive
+
+**Examples of what gets excluded with `["TestApp"]`:**
+
+| Path                                     | Excluded? | Why                                     |
+| ---------------------------------------- | --------- | --------------------------------------- |
+| `C:/workspace/TestApp/app.json`          | ✅ Yes    | Exact folder name match                 |
+| `C:/workspace/Projects/TestApp/app.json` | ✅ Yes    | Exact folder name match (nested)        |
+| `C:/workspace/TestAppV2/app.json`        | ❌ No     | "TestAppV2" ≠ "TestApp" (partial match) |
+| `C:/workspace/MyTestApp/app.json`        | ❌ No     | "MyTestApp" ≠ "TestApp" (partial match) |
+
+### excludePatterns Setting (Glob Patterns)
+
+The `bcObjectRange.excludePatterns` setting allows you to exclude specific files, folders, or entire projects from being analyzed by the extension using glob patterns. This is particularly useful when you have test projects, dependencies, or other AL projects in your workspace that you don't want to include in the object range analysis.
+
+#### How Exclude Patterns Work
+
+Exclude patterns use **glob pattern syntax** and are applied when the extension:
+
+1. Searches for `app.json` files to detect projects
+2. Searches for `.al` files within detected projects
+3. **Post-filters projects by their full path** (this enables workspace root folder exclusion)
+
+The patterns are combined with the `{pattern1,pattern2,...}` syntax and applied to both searches.
+
+#### Glob Pattern Syntax
+
+| Pattern    | Description                                            | Example Matches                                     |
+| ---------- | ------------------------------------------------------ | --------------------------------------------------- |
+| `*`        | Matches any number of characters within a folder name  | `*.al` matches all AL files                         |
+| `**`       | Matches zero or more directories                       | `**/test/**` matches any `test` folder at any level |
+| `?`        | Matches a single character                             | `file?.al` matches `file1.al`, `fileA.al`           |
+| `[abc]`    | Matches any character in the brackets                  | `file[123].al` matches `file1.al`, `file2.al`       |
+| `{a,b}`    | Matches any of the comma-separated patterns            | `*.{al,json}` matches `.al` and `.json` files       |
+| `!pattern` | Negates the pattern (NOT supported in excludePatterns) | N/A - use separate patterns instead                 |
+
+> **Important:** All patterns are case-insensitive.
+
+#### Common Use Cases
+
+##### 1. Excluding Test Projects
+
+If you have test or demo projects that you don't want included in the analysis:
+
+```json
+{
+  "bcObjectRange.excludePatterns": [
+    "**/node_modules/**",
+    "**/.altestrunner/**",
+    "**/.alpackages/**",
+    "**/TestApps/**",
+    "**/DemoApps/**"
+  ]
+}
+```
+
+This excludes:
+
+- All folders named `TestApps` at any level
+- All folders named `DemoApps` at any level
+
+##### 2. Excluding Specific Project by Name
+
+To exclude a specific project folder:
+
+```json
+{
+  "bcObjectRange.excludePatterns": [
+    "**/node_modules/**",
+    "**/.altestrunner/**",
+    "**/.alpackages/**",
+    "**/Backup_Project/**",
+    "**/Legacy_Extension/**"
+  ]
+}
+```
+
+##### 3. Excluding Multiple Projects with a Pattern
+
+If your test projects follow a naming convention:
+
+```json
+{
+  "bcObjectRange.excludePatterns": [
+    "**/node_modules/**",
+    "**/.altestrunner/**",
+    "**/.alpackages/**",
+    "**/*Test*/**",
+    "**/*Demo*/**",
+    "**/*_old/**"
+  ]
+}
+```
+
+This excludes any folder containing:
+
+- `Test` in its name (e.g., `MyTest`, `TestProject`, `IntegrationTests`)
+- `Demo` in its name (e.g., `DemoApp`, `CustomerDemo`)
+- `_old` in its name (e.g., `Project_old`, `Extension_old`)
+
+##### 4. Excluding Top-Level Folders Only
+
+To exclude only top-level folders (not nested ones):
+
+```json
+{
+  "bcObjectRange.excludePatterns": [
+    "**/node_modules/**",
+    "**/.altestrunner/**",
+    "**/.alpackages/**",
+    "archive/**",
+    "backup/**"
+  ]
+}
+```
+
+> **Note:** Without the leading `**/`, the pattern only matches folders at the workspace root level.
+
+##### 5. Excluding by File Pattern
+
+To exclude specific AL files:
+
+```json
+{
+  "bcObjectRange.excludePatterns": [
+    "**/node_modules/**",
+    "**/.altestrunner/**",
+    "**/.alpackages/**",
+    "**/*.Test.al",
+    "**/Temp*.al"
+  ]
+}
+```
+
+This excludes:
+
+- Any AL file ending with `.Test.al` (e.g., `MyTable.Test.al`)
+- Any AL file starting with `Temp` (e.g., `TempFile.al`, `Temporary.al`)
+
+##### 6. Complex Multi-Root Workspace Scenario
+
+For a workspace with multiple apps where you want to exclude specific ones:
+
+**Workspace structure:**
+
+```
+workspace/
+├── CoreApp/                ← Include ✅
+├── SalesExtension/         ← Include ✅
+├── InventoryExtension/     ← Include ✅
+├── TestApps/              ← Exclude ❌
+│   ├── CoreApp.Test/
+│   └── SalesExtension.Test/
+└── Archive/               ← Exclude ❌
+    └── OldSalesExtension/
+```
+
+**Configuration:**
+
+```json
+{
+  "bcObjectRange.excludePatterns": [
+    "**/node_modules/**",
+    "**/.altestrunner/**",
+    "**/.alpackages/**",
+    "TestApps/**",
+    "Archive/**"
+  ]
+}
+```
+
+#### Per-Folder Configuration (Multi-Root Workspaces)
+
+Since `excludePatterns` has **resource scope**, you can configure different exclusions for each folder in a multi-root workspace:
+
+**.code-workspace file:**
+
+```json
+{
+  "folders": [
+    {
+      "path": "CoreApp",
+      "settings": {
+        "bcObjectRange.excludePatterns": [
+          "**/node_modules/**",
+          "**/.alpackages/**"
+        ]
+      }
+    },
+    {
+      "path": "Extensions",
+      "settings": {
+        "bcObjectRange.excludePatterns": [
+          "**/node_modules/**",
+          "**/.alpackages/**",
+          "**/Archived/**",
+          "**/Test/**"
+        ]
+      }
+    }
+  ]
+}
+```
+
+This allows the `CoreApp` folder to analyze everything, while the `Extensions` folder excludes archived and test projects.
+
+#### Troubleshooting Exclude Patterns
+
+##### Issue: Workspace Root Folder Not Being Excluded
+
+**Problem:** You added a folder to your workspace using "Add Folder to Workspace" and patterns like `**/App_FaultyItems/**` don't exclude it.
+
+**Solution:** Use the `excludeFolders` setting instead:
+
+```json
+{
+  "bcObjectRange.excludeFolders": ["App_FaultyItems"]
+}
+```
+
+**Why this happens:** VS Code's `findFiles` API evaluates glob patterns relative to each workspace root. When `App_FaultyItems` is a workspace root, the path to its `app.json` is just `app.json` (not `App_FaultyItems/app.json`), so the pattern doesn't match.
+
+The `excludeFolders` setting solves this by checking folder names anywhere in the absolute path.
+
+##### Issue: Project Still Appearing After Exclusion
+
+**Solution:** Try these approaches in order:
+
+1. **First, try `excludeFolders`** (simplest for folder names):
+
+   ```json
+   { "bcObjectRange.excludeFolders": ["FolderName"] }
+   ```
+
+2. **If that doesn't work, check your glob pattern:**
+   - Use `**/` prefix for folders at any level
+   - Test with a simpler pattern first (e.g., `**/FolderName/**`)
+
+**Example:**
+
+```
+Workspace root: C:\Users\...\MyWorkspace\
+Project path:   C:\Users\...\MyWorkspace\Apps\TestApp\
+
+Correct pattern:   "**/TestApp/**" or "Apps/TestApp/**"
+Incorrect pattern: "TestApp/**" (won't match as it's not at root)
+```
+
+##### Issue: Too Many Projects Excluded
+
+**Solution:** Be more specific with your patterns:
+
+```json
+// ❌ Too broad - excludes all folders with "Test" anywhere
+"**/*Test*/**"
+
+// ✅ More specific - only excludes folders ending with "Test"
+"**/*Test/"
+```
+
+##### Issue: Exclude Pattern Not Working
+
+**Checklist:**
+
+1. ✅ Pattern uses forward slashes (`/`) not backslashes (`\`)
+2. ✅ Pattern is in a JSON array (`["pattern1", "pattern2"]`)
+3. ✅ VS Code settings are saved
+4. ✅ Extension has been refreshed (run "BC Object Range: Refresh" command)
+
+#### Verification
+
+After configuring exclude patterns, verify they work correctly:
+
+1. Open the **BC Object Range** view in the Activity Bar
+2. Check which projects appear under "Used Object IDs"
+3. If a project still appears but shouldn't:
+   - Right-click the project folder → **Copy Path**
+   - Compare the path with your exclude pattern
+   - Adjust the pattern to match the actual folder structure
+
+#### Performance Tip
+
+Excluding unnecessary folders improves scan performance, especially for large workspaces:
+
+```json
+{
+  "bcObjectRange.excludePatterns": [
+    // Standard exclusions
+    "**/node_modules/**",
+    "**/.altestrunner/**",
+    "**/.alpackages/**",
+
+    // Build outputs
+    "**/.output/**",
+    "**/bin/**",
+    "**/obj/**",
+
+    // Archives and backups
+    "**/archive/**",
+    "**/backup/**",
+    "**/.git/**"
+  ]
+}
 ```
 
 ### Setting Scopes Explained
@@ -220,12 +559,14 @@ For multi-root workspaces, configure settings in your `.code-workspace` file:
   "folders": [
     { "path": "core-app" },
     { "path": "sales-app" },
-    { "path": "inventory-app" }
+    { "path": "inventory-app" },
+    { "path": "test-app" }
   ],
   "settings": {
     "bcObjectRange.sharedRangeMode": true,
     "bcObjectRange.autoRefresh": true,
-    "bcObjectRange.autoRefreshDelay": 500
+    "bcObjectRange.autoRefreshDelay": 500,
+    "bcObjectRange.excludeFolders": ["test-app"]
   }
 }
 ```
@@ -237,11 +578,11 @@ For multi-root workspaces, configure settings in your `.code-workspace` file:
   "bcObjectRange.autoRefresh": true,
   "bcObjectRange.autoRefreshDelay": 500,
   "bcObjectRange.sharedRangeMode": true,
+  "bcObjectRange.excludeFolders": ["App_FaultyItems", "TestApps"],
   "bcObjectRange.excludePatterns": [
     "**/node_modules/**",
     "**/.altestrunner/**",
-    "**/.alpackages/**",
-    "**/TestApps/**"
+    "**/.alpackages/**"
   ]
 }
 ```
@@ -514,7 +855,19 @@ If `sales-app` accidentally creates `table 50000` (same as `core-app`):
 
 - Your project has a valid `app.json` file
 - The folder is included in your workspace
-- The folder isn't excluded by `bcObjectRange.excludePatterns`
+- The folder isn't excluded by `bcObjectRange.excludeFolders` or `bcObjectRange.excludePatterns`
+
+### Q: How do I exclude a workspace root folder?
+
+**A:** Use the `excludeFolders` setting with the folder name:
+
+```json
+{
+  "bcObjectRange.excludeFolders": ["App_FaultyItems"]
+}
+```
+
+This is more reliable than glob patterns for workspace root folders. See the [Excluding Projects from Analysis](#excluding-projects-from-analysis) section for details.
 
 ### Q: Why are some objects missing?
 
@@ -565,6 +918,17 @@ To configure `sharedRangeMode`:
 ---
 
 ## Release Notes
+
+### 0.5.0
+
+- **NEW:** `excludeFolders` setting - Simple folder name exclusion for workspace root folders
+  - Matches folder names anywhere in the path (case-insensitive)
+  - Ideal for excluding workspace root folders added via "Add Folder to Workspace"
+  - Simpler alternative to glob patterns for common use cases
+- **IMPROVED:** `excludePatterns` now works for workspace root folders via post-filtering
+  - Uses `minimatch` for reliable glob pattern matching
+  - Patterns are matched against the full absolute path
+- **IMPROVED:** Comprehensive documentation for exclusion settings with examples
 
 ### 0.3.0
 
