@@ -2,6 +2,14 @@
 
 All notable changes to the "BC Object Range Analyzer" extension will be documented in this file.
 
+## [0.4.2] - 2026-01-16
+
+### Fixed
+
+- Fixed VSIX packaging failing due to pnpm symlinks by adding `.npmrc` with `node-linker=hoisted`
+- Added `.vscodeignore` to exclude unnecessary files from the extension package
+- Added MIT LICENSE file
+
 ## [0.4.1] - 2026-01-16
 
 ### Fixed

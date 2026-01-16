@@ -1,0 +1,11 @@
+.vscode/**
+.github/**
+src/**
+out/test/**
+**/*.map
+.gitignore
+.mocharc.json
+tsconfig.json
+pnpm-lock.yaml
+**/*.ts
+!node_modules/**
