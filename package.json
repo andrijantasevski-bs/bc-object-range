@@ -2,7 +2,7 @@
   "name": "bc-object-range",
   "displayName": "BC Object Range Analyzer",
   "description": "Analyze AL object ID range usage in Business Central projects",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "AndrijanTasevski",
   "repository": {
     "type": "git",
@@ -136,14 +136,15 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "pnpm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "pretest": "pnpm run compile && pnpm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
     "test:unit": "mocha ./out/test/unit/**/*.test.js"
   },
+  "packageManager": "pnpm@9.15.4",
   "devDependencies": {
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.6",

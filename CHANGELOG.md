@@ -2,6 +2,15 @@
 
 All notable changes to the "BC Object Range Analyzer" extension will be documented in this file.
 
+## [0.4.0] - 2026-01-16
+
+### Changed
+
+- **Migrated to pnpm**: Project now uses pnpm as the package manager instead of npm
+  - Updated all scripts in `package.json` to use pnpm
+  - Updated CI/CD workflows to use pnpm with proper caching
+  - Added `packageManager` field to `package.json` for consistency
+
 ## [0.3.0] - 2026-01-16
 
 ### Added
