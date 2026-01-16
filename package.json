@@ -6,7 +6,7 @@
   "publisher": "bc-tools",
   "repository": {
     "type": "git",
-    "url": "https://github.com/anthropic-engineering/bc-object-range"
+    "url": "https://github.com/andrijantasevski-bs/bc-object-range"
   },
   "engines": {
     "vscode": "^1.74.0"
