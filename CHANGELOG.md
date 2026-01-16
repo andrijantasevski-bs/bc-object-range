@@ -2,6 +2,26 @@
 
 All notable changes to the "BC Object Range Analyzer" extension will be documented in this file.
 
+## [0.2.0] - 2026-01-16
+
+### Added
+
+- **Shared Range Mode** for multi-app scenarios with shared ID ranges (OnPrem licensing)
+- **Conflict Detection** when same object type + ID is used across different projects
+- **Per-object-type gap calculation** in shared mode
+- **Quick pick for object type selection** when copying next available ID in shared mode
+
+### Improved
+
+- Settings now have proper scopes for multi-root workspace support:
+  - `autoRefresh`, `autoRefreshDelay`, `excludePatterns`: Resource scope (per-folder)
+  - `sharedRangeMode`: Window scope (workspace-wide)
+- Comprehensive documentation with examples
+
+### Configuration Options
+
+- `bcObjectRange.sharedRangeMode`: Enable shared range mode for multi-app scenarios
+
 ## [0.0.1] - Initial Release
 
 ### Added

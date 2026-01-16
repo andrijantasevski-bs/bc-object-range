@@ -2,8 +2,12 @@
   "name": "bc-object-range",
   "displayName": "BC Object Range Analyzer",
   "description": "Analyze AL object ID range usage in Business Central projects",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "publisher": "bc-tools",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropic-engineering/bc-object-range"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },
