@@ -200,9 +200,18 @@ class TestableCompletionProvider {
 
   /**
    * Match an AL object type keyword at the end of the text
+   * Also checks indentation - real object declarations should have minimal indentation.
    */
   public matchObjectType(text: string): string | null {
     const trimmed = text.trimEnd();
+
+    // Check indentation - real object declarations should have minimal indentation
+    // (0-3 spaces or no tabs). Content inside objects is typically indented more.
+    const leadingWhitespace = text.match(/^(\s*)/)?.[1] || "";
+    const spaceCount = leadingWhitespace.replace(/\t/g, "    ").length;
+    if (spaceCount > 3) {
+      return null;
+    }
 
     for (const objectType of AL_OBJECT_TYPES_WITH_ID) {
       const regex = new RegExp(`^\\s*${objectType}\\s*$`, "i");
@@ -212,6 +221,87 @@ class TestableCompletionProvider {
     }
 
     return null;
+  }
+
+  /**
+   * Check if the cursor position is at file root level (not inside an object body).
+   * This is determined by counting unmatched opening braces in preceding lines.
+   *
+   * @param documentLines Array of lines in the document
+   * @param currentLine The current line number (0-based)
+   * @returns true if at file root level, false if inside an object body
+   */
+  public isAtFileRootLevel(
+    documentLines: string[],
+    currentLine: number
+  ): boolean {
+    let braceDepth = 0;
+
+    // Limit scan to prevent performance issues on large files
+    const maxLinesToScan = Math.min(currentLine, 500);
+    const startLine = currentLine - maxLinesToScan;
+
+    for (let i = startLine; i < currentLine; i++) {
+      braceDepth += this.countBraceBalance(documentLines[i]);
+    }
+
+    // If brace depth is 0, we're at file root level
+    return braceDepth === 0;
+  }
+
+  /**
+   * Count the brace balance for a line of text.
+   * Returns positive for more opening braces, negative for more closing braces.
+   * Ignores braces inside strings and comments.
+   */
+  public countBraceBalance(line: string): number {
+    let balance = 0;
+    let inString = false;
+    let inSingleLineComment = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+
+      // Check for single-line comment start
+      if (!inString && char === "/" && nextChar === "/") {
+        inSingleLineComment = true;
+        break; // Rest of line is comment
+      }
+
+      // Check for string delimiter (AL uses single quotes for strings)
+      if (!inSingleLineComment && char === "'") {
+        inString = !inString;
+        continue;
+      }
+
+      // Count braces only when not in string or comment
+      if (!inString && !inSingleLineComment) {
+        if (char === "{") {
+          balance++;
+        } else if (char === "}") {
+          balance--;
+        }
+      }
+    }
+
+    return balance;
+  }
+
+  /**
+   * Simulate the full completion check including scope detection
+   * Returns true if completion should be provided, false otherwise
+   */
+  public shouldProvideCompletion(
+    documentLines: string[],
+    currentLine: number,
+    textBeforeCursor: string
+  ): boolean {
+    const objectTypeMatch = this.matchObjectType(textBeforeCursor);
+    if (!objectTypeMatch) {
+      return false;
+    }
+    return this.isAtFileRootLevel(documentLines, currentLine);
   }
 
   /**
@@ -862,6 +952,572 @@ suite("Completion Provider Test Suite", () => {
         "/workspace/other/test.al"
       );
       assert.strictEqual(foundOuter?.name, "Outer");
+    });
+  });
+
+  suite("Indentation Check - False Positive Prevention", () => {
+    test("should match keyword with no indentation", () => {
+      const result = provider.matchObjectType("codeunit");
+      assert.strictEqual(result, "codeunit");
+    });
+
+    test("should match keyword with 1 space indentation", () => {
+      const result = provider.matchObjectType(" codeunit");
+      assert.strictEqual(result, "codeunit");
+    });
+
+    test("should match keyword with 2 spaces indentation", () => {
+      const result = provider.matchObjectType("  codeunit");
+      assert.strictEqual(result, "codeunit");
+    });
+
+    test("should match keyword with 3 spaces indentation", () => {
+      const result = provider.matchObjectType("   codeunit");
+      assert.strictEqual(result, "codeunit");
+    });
+
+    test("should NOT match keyword with 4 spaces indentation", () => {
+      const result = provider.matchObjectType("    codeunit");
+      assert.strictEqual(result, null);
+    });
+
+    test("should NOT match keyword with 8 spaces indentation", () => {
+      const result = provider.matchObjectType("        table");
+      assert.strictEqual(result, null);
+    });
+
+    test("should NOT match keyword with tab indentation (counts as 4 spaces)", () => {
+      const result = provider.matchObjectType("\tcodeunit");
+      assert.strictEqual(result, null);
+    });
+
+    test("should NOT match keyword with multiple tabs", () => {
+      const result = provider.matchObjectType("\t\tpage");
+      assert.strictEqual(result, null);
+    });
+  });
+
+  suite("Brace Balance Calculation", () => {
+    test("should return 0 for empty line", () => {
+      const balance = provider.countBraceBalance("");
+      assert.strictEqual(balance, 0);
+    });
+
+    test("should return 1 for line with opening brace", () => {
+      const balance = provider.countBraceBalance("codeunit 50000 MyCodeunit {");
+      assert.strictEqual(balance, 1);
+    });
+
+    test("should return -1 for line with closing brace", () => {
+      const balance = provider.countBraceBalance("}");
+      assert.strictEqual(balance, -1);
+    });
+
+    test("should return 0 for balanced braces on same line", () => {
+      const balance = provider.countBraceBalance("{ }");
+      assert.strictEqual(balance, 0);
+    });
+
+    test("should ignore braces in single-line comments", () => {
+      const balance = provider.countBraceBalance(
+        "// this { comment } has braces"
+      );
+      assert.strictEqual(balance, 0);
+    });
+
+    test("should count braces before comment starts", () => {
+      const balance = provider.countBraceBalance(
+        "codeunit 50000 MyCodeunit { // comment with }"
+      );
+      assert.strictEqual(balance, 1);
+    });
+
+    test("should ignore braces in strings", () => {
+      const balance = provider.countBraceBalance(
+        "Message('This { is } a string');"
+      );
+      assert.strictEqual(balance, 0);
+    });
+
+    test("should handle nested braces", () => {
+      const balance = provider.countBraceBalance(
+        "procedure Test() { if (true) {"
+      );
+      assert.strictEqual(balance, 2);
+    });
+  });
+
+  suite("File Root Level Detection", () => {
+    test("should return true for empty document", () => {
+      const lines: string[] = [];
+      const result = provider.isAtFileRootLevel(lines, 0);
+      assert.strictEqual(result, true);
+    });
+
+    test("should return true at start of document with no preceding content", () => {
+      const lines = ["table "];
+      const result = provider.isAtFileRootLevel(lines, 0);
+      assert.strictEqual(result, true);
+    });
+
+    test("should return true after a closed object", () => {
+      const lines = [
+        "codeunit 50000 MyCodeunit",
+        "{",
+        "    procedure Test()",
+        "    {",
+        "    }",
+        "}",
+        "table ", // Cursor here - this is at file root level
+      ];
+      const result = provider.isAtFileRootLevel(lines, 6);
+      assert.strictEqual(result, true);
+    });
+
+    test("should return false inside an object body", () => {
+      const lines = [
+        "codeunit 50000 MyCodeunit",
+        "{",
+        "    table ", // Cursor here - this is inside the codeunit
+      ];
+      const result = provider.isAtFileRootLevel(lines, 2);
+      assert.strictEqual(result, false);
+    });
+
+    test("should return false inside nested braces", () => {
+      const lines = [
+        "codeunit 50000 MyCodeunit",
+        "{",
+        "    procedure Test()",
+        "    {",
+        "        table ", // Cursor here - inside procedure
+      ];
+      const result = provider.isAtFileRootLevel(lines, 4);
+      assert.strictEqual(result, false);
+    });
+
+    test("should return true when all braces are balanced", () => {
+      const lines = [
+        "codeunit 50000 MyCodeunit",
+        "{",
+        "    procedure Test()",
+        "    {",
+        "    }",
+        "}",
+        "", // Empty line between objects
+        "page ", // Cursor here
+      ];
+      const result = provider.isAtFileRootLevel(lines, 7);
+      assert.strictEqual(result, true);
+    });
+  });
+
+  suite("Scope Detection - PermissionSet False Positives", () => {
+    test("should NOT provide completion for 'table' inside permissionset Permissions", () => {
+      const lines = [
+        'permissionset 50000 "My PermissionSet"',
+        "{",
+        "    Permissions =",
+        "        tabledata Customer = RIMD,",
+        "        table ", // Cursor here - inside permissionset body
+      ];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        4,
+        "        table "
+      );
+      assert.strictEqual(result, false);
+    });
+
+    test("should NOT provide completion for 'codeunit' inside permissionset", () => {
+      const lines = [
+        'permissionset 50000 "My PermissionSet"',
+        "{",
+        "    Permissions =",
+        "        codeunit ", // Cursor here
+      ];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        3,
+        "        codeunit "
+      );
+      assert.strictEqual(result, false);
+    });
+
+    test("should NOT provide completion for 'page' inside permissionset", () => {
+      const lines = [
+        'permissionset 50000 "My PermissionSet"',
+        "{",
+        "    Permissions =",
+        "        page ", // Cursor here
+      ];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        3,
+        "        page "
+      );
+      assert.strictEqual(result, false);
+    });
+
+    test("should NOT provide completion for 'report' inside permissionset", () => {
+      const lines = [
+        'permissionset 50000 "My PermissionSet"',
+        "{",
+        "    Permissions =",
+        "        report ", // Cursor here
+      ];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        3,
+        "        report "
+      );
+      assert.strictEqual(result, false);
+    });
+
+    test("should NOT provide completion for 'query' inside permissionset", () => {
+      const lines = [
+        'permissionset 50000 "My PermissionSet"',
+        "{",
+        "    Permissions =",
+        "        query ", // Cursor here
+      ];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        3,
+        "        query "
+      );
+      assert.strictEqual(result, false);
+    });
+
+    test("should NOT provide completion for 'xmlport' inside permissionset", () => {
+      const lines = [
+        'permissionset 50000 "My PermissionSet"',
+        "{",
+        "    Permissions =",
+        "        xmlport ", // Cursor here
+      ];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        3,
+        "        xmlport "
+      );
+      assert.strictEqual(result, false);
+    });
+  });
+
+  suite("Scope Detection - Entitlement False Positives", () => {
+    test("should NOT provide completion for 'table' inside entitlement", () => {
+      const lines = [
+        'entitlement "My Entitlement"',
+        "{",
+        "    ObjectEntitlements =",
+        "        table ", // Cursor here
+      ];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        3,
+        "        table "
+      );
+      assert.strictEqual(result, false);
+    });
+
+    test("should NOT provide completion for 'page' inside entitlement", () => {
+      const lines = [
+        'entitlement "My Entitlement"',
+        "{",
+        "    ObjectEntitlements =",
+        "        page ", // Cursor here
+      ];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        3,
+        "        page "
+      );
+      assert.strictEqual(result, false);
+    });
+
+    test("should NOT provide completion for 'codeunit' inside entitlement", () => {
+      const lines = [
+        'entitlement "My Entitlement"',
+        "{",
+        "    ObjectEntitlements =",
+        "        codeunit ", // Cursor here
+      ];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        3,
+        "        codeunit "
+      );
+      assert.strictEqual(result, false);
+    });
+  });
+
+  suite("Scope Detection - Object Body False Positives", () => {
+    test("should NOT provide completion for 'table' inside codeunit body", () => {
+      const lines = [
+        'codeunit 50000 "My Codeunit"',
+        "{",
+        "    // Comment",
+        "    table ", // Cursor here - inside codeunit
+      ];
+      const result = provider.shouldProvideCompletion(lines, 3, "    table ");
+      assert.strictEqual(result, false);
+    });
+
+    test("should NOT provide completion for 'page' inside procedure", () => {
+      const lines = [
+        'codeunit 50000 "My Codeunit"',
+        "{",
+        "    procedure DoSomething()",
+        "    {",
+        "        page ", // Cursor here - inside procedure
+      ];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        4,
+        "        page "
+      );
+      assert.strictEqual(result, false);
+    });
+
+    test("should NOT provide completion for 'report' inside table", () => {
+      const lines = [
+        'table 50000 "My Table"',
+        "{",
+        "    fields",
+        "    {",
+        "        report ", // Cursor here - inside table fields
+      ];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        4,
+        "        report "
+      );
+      assert.strictEqual(result, false);
+    });
+  });
+
+  suite("Scope Detection - Valid Object Declarations", () => {
+    test("should provide completion for 'table' at file root", () => {
+      const lines = ["table "];
+      const result = provider.shouldProvideCompletion(lines, 0, "table ");
+      assert.strictEqual(result, true);
+    });
+
+    test("should provide completion for 'codeunit' at file root", () => {
+      const lines = ["codeunit "];
+      const result = provider.shouldProvideCompletion(lines, 0, "codeunit ");
+      assert.strictEqual(result, true);
+    });
+
+    test("should provide completion for 'page' at file root", () => {
+      const lines = ["page "];
+      const result = provider.shouldProvideCompletion(lines, 0, "page ");
+      assert.strictEqual(result, true);
+    });
+
+    test("should provide completion for 'report' at file root", () => {
+      const lines = ["report "];
+      const result = provider.shouldProvideCompletion(lines, 0, "report ");
+      assert.strictEqual(result, true);
+    });
+
+    test("should provide completion for 'query' at file root", () => {
+      const lines = ["query "];
+      const result = provider.shouldProvideCompletion(lines, 0, "query ");
+      assert.strictEqual(result, true);
+    });
+
+    test("should provide completion for 'xmlport' at file root", () => {
+      const lines = ["xmlport "];
+      const result = provider.shouldProvideCompletion(lines, 0, "xmlport ");
+      assert.strictEqual(result, true);
+    });
+
+    test("should provide completion for 'enum' at file root", () => {
+      const lines = ["enum "];
+      const result = provider.shouldProvideCompletion(lines, 0, "enum ");
+      assert.strictEqual(result, true);
+    });
+
+    test("should provide completion for 'permissionset' at file root", () => {
+      const lines = ["permissionset "];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        0,
+        "permissionset "
+      );
+      assert.strictEqual(result, true);
+    });
+
+    test("should provide completion for 'tableextension' at file root", () => {
+      const lines = ["tableextension "];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        0,
+        "tableextension "
+      );
+      assert.strictEqual(result, true);
+    });
+
+    test("should provide completion for 'pageextension' at file root", () => {
+      const lines = ["pageextension "];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        0,
+        "pageextension "
+      );
+      assert.strictEqual(result, true);
+    });
+
+    test("should provide completion for object declaration after closed object", () => {
+      const lines = [
+        'codeunit 50000 "First Codeunit"',
+        "{",
+        "    procedure Test()",
+        "    {",
+        "    }",
+        "}",
+        "",
+        "codeunit ", // Cursor here - file root level
+      ];
+      const result = provider.shouldProvideCompletion(lines, 7, "codeunit ");
+      assert.strictEqual(result, true);
+    });
+
+    test("should provide completion with leading spaces (up to 3)", () => {
+      const lines = ["   table "];
+      const result = provider.shouldProvideCompletion(lines, 0, "   table ");
+      assert.strictEqual(result, true);
+    });
+  });
+
+  suite("Scope Detection - Edge Cases", () => {
+    test("should handle braces in strings correctly", () => {
+      const lines = [
+        "codeunit 50000 MyCodeunit",
+        "{",
+        "    procedure Test()",
+        "    {",
+        "        Message('This { has } braces');",
+        "    }",
+        "}",
+        "table ", // Cursor here - should be at root level
+      ];
+      const result = provider.shouldProvideCompletion(lines, 7, "table ");
+      assert.strictEqual(result, true);
+    });
+
+    test("should handle braces in comments correctly", () => {
+      const lines = [
+        "codeunit 50000 MyCodeunit",
+        "{",
+        "    // This is a comment with { braces }",
+        "    procedure Test()",
+        "    {",
+        "    }",
+        "}",
+        "page ", // Cursor here - should be at root level
+      ];
+      const result = provider.shouldProvideCompletion(lines, 7, "page ");
+      assert.strictEqual(result, true);
+    });
+
+    test("should handle mixed brace scenarios", () => {
+      const lines = [
+        "codeunit 50000 MyCodeunit",
+        "{",
+        "    procedure Test()",
+        "    {",
+        "        if true then begin",
+        "            Message('text');",
+        "        end;",
+        "    }",
+        "    ",
+        "    report ", // Cursor here - still inside codeunit
+      ];
+      const result = provider.shouldProvideCompletion(lines, 9, "    report ");
+      assert.strictEqual(result, false);
+    });
+
+    test("should handle multiple objects in same file", () => {
+      const lines = [
+        "codeunit 50000 MyCodeunit",
+        "{",
+        "}",
+        "",
+        "table 50001 MyTable",
+        "{",
+        "}",
+        "",
+        "page ", // Cursor here - file root level after two closed objects
+      ];
+      const result = provider.shouldProvideCompletion(lines, 8, "page ");
+      assert.strictEqual(result, true);
+    });
+  });
+
+  suite("Regression Tests - Existing Functionality", () => {
+    // These tests ensure we haven't broken the original functionality
+    test("all 13 object types should still trigger at file root", () => {
+      for (const objectType of AL_OBJECT_TYPES_WITH_ID) {
+        const lines = [`${objectType} `];
+        const result = provider.shouldProvideCompletion(
+          lines,
+          0,
+          `${objectType} `
+        );
+        assert.strictEqual(
+          result,
+          true,
+          `Should provide completion for ${objectType}`
+        );
+      }
+    });
+
+    test("object types without ID should never trigger", () => {
+      for (const objectType of AL_OBJECT_TYPES_WITHOUT_ID) {
+        const lines = [`${objectType} `];
+        const result = provider.shouldProvideCompletion(
+          lines,
+          0,
+          `${objectType} `
+        );
+        assert.strictEqual(
+          result,
+          false,
+          `Should not provide completion for ${objectType}`
+        );
+      }
+    });
+
+    test("should handle case insensitivity at file root", () => {
+      const testCases = ["CODEUNIT ", "Codeunit ", "codeunit ", "CodeUnit "];
+      for (const testCase of testCases) {
+        const lines = [testCase];
+        const result = provider.shouldProvideCompletion(lines, 0, testCase);
+        assert.strictEqual(
+          result,
+          true,
+          `Should handle case: ${testCase.trim()}`
+        );
+      }
+    });
+
+    test("should not match partial keywords", () => {
+      const lines = ["code "];
+      const result = provider.shouldProvideCompletion(lines, 0, "code ");
+      assert.strictEqual(result, false);
+    });
+
+    test("should not match keywords with extra content", () => {
+      const lines = ["codeunit 50000"];
+      const result = provider.shouldProvideCompletion(
+        lines,
+        0,
+        "codeunit 50000"
+      );
+      assert.strictEqual(result, false);
     });
   });
 });

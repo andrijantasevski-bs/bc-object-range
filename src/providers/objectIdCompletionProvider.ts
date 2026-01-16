@@ -46,6 +46,12 @@ export class ObjectIdCompletionProvider
       return undefined;
     }
 
+    // Check if we are at file root level (not inside an object body)
+    // This prevents false positives when typing object type keywords inside permissionsets, entitlements, etc.
+    if (!this.isAtFileRootLevel(document, position.line)) {
+      return undefined;
+    }
+
     const objectType = objectTypeMatch.toLowerCase() as ALObjectTypeWithId;
 
     // Get configuration for shared mode
@@ -126,6 +132,14 @@ export class ObjectIdCompletionProvider
     // Trim the text and check if it ends with an object type keyword followed by optional whitespace
     const trimmed = text.trimEnd();
 
+    // Check indentation - real object declarations should have minimal indentation
+    // (0-3 spaces or no tabs). Content inside objects is typically indented more.
+    const leadingWhitespace = text.match(/^(\s*)/)?.[1] || "";
+    const spaceCount = leadingWhitespace.replace(/\t/g, "    ").length;
+    if (spaceCount > 3) {
+      return null;
+    }
+
     // Pattern: starts with optional whitespace, then an object type keyword
     // The keyword should be at the end (possibly followed by spaces which we already trimmed)
     for (const objectType of AL_OBJECT_TYPES_WITH_ID) {
@@ -137,6 +151,72 @@ export class ObjectIdCompletionProvider
     }
 
     return null;
+  }
+
+  /**
+   * Check if the cursor position is at file root level (not inside an object body).
+   * This is determined by counting unmatched opening braces in preceding lines.
+   *
+   * @param document The text document
+   * @param currentLine The current line number (0-based)
+   * @returns true if at file root level, false if inside an object body
+   */
+  private isAtFileRootLevel(
+    document: vscode.TextDocument,
+    currentLine: number
+  ): boolean {
+    let braceDepth = 0;
+
+    // Limit scan to prevent performance issues on large files
+    const maxLinesToScan = Math.min(currentLine, 500);
+    const startLine = currentLine - maxLinesToScan;
+
+    for (let i = startLine; i < currentLine; i++) {
+      const lineText = document.lineAt(i).text;
+      braceDepth += this.countBraceBalance(lineText);
+    }
+
+    // If brace depth is 0, we're at file root level
+    return braceDepth === 0;
+  }
+
+  /**
+   * Count the brace balance for a line of text.
+   * Returns positive for more opening braces, negative for more closing braces.
+   * Ignores braces inside strings and comments.
+   */
+  private countBraceBalance(line: string): number {
+    let balance = 0;
+    let inString = false;
+    let inSingleLineComment = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+
+      // Check for single-line comment start
+      if (!inString && char === "/" && nextChar === "/") {
+        inSingleLineComment = true;
+        break; // Rest of line is comment
+      }
+
+      // Check for string delimiter (AL uses single quotes for strings)
+      if (!inSingleLineComment && char === "'") {
+        inString = !inString;
+        continue;
+      }
+
+      // Count braces only when not in string or comment
+      if (!inString && !inSingleLineComment) {
+        if (char === "{") {
+          balance++;
+        } else if (char === "}") {
+          balance--;
+        }
+      }
+    }
+
+    return balance;
   }
 
   /**
