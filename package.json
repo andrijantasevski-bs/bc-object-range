@@ -1,0 +1,149 @@
+{
+  "name": "bc-object-range",
+  "displayName": "BC Object Range Analyzer",
+  "description": "Analyze AL object ID range usage in Business Central projects",
+  "version": "0.0.1",
+  "publisher": "bc-tools",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/app.json"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bc-object-range",
+          "title": "BC Object Range",
+          "icon": "$(symbol-numeric)"
+        }
+      ]
+    },
+    "views": {
+      "bc-object-range": [
+        {
+          "id": "bcObjectRange.usedIds",
+          "name": "Used Object IDs",
+          "icon": "$(checklist)",
+          "contextualTitle": "BC Object Range"
+        },
+        {
+          "id": "bcObjectRange.unusedIds",
+          "name": "Unused IDs / Gaps",
+          "icon": "$(circle-outline)",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "bcObjectRange.analyze",
+        "title": "Analyze Object Ranges",
+        "category": "BC Object Range",
+        "icon": "$(search)"
+      },
+      {
+        "command": "bcObjectRange.refresh",
+        "title": "Refresh",
+        "category": "BC Object Range",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "bcObjectRange.copyNextId",
+        "title": "Copy Next Available ID",
+        "category": "BC Object Range",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "bcObjectRange.openFile",
+        "title": "Open File",
+        "category": "BC Object Range"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "bcObjectRange.refresh",
+          "when": "view == bcObjectRange.usedIds || view == bcObjectRange.unusedIds",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "bcObjectRange.copyNextId",
+          "when": "view == bcObjectRange.unusedIds && viewItem == gapItem",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "bcObjectRange.analyze",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "bcObjectRange.refresh",
+          "when": "workspaceFolderCount > 0"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "BC Object Range Analyzer",
+      "properties": {
+        "bcObjectRange.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh the view when .al files change"
+        },
+        "bcObjectRange.autoRefreshDelay": {
+          "type": "number",
+          "default": 300,
+          "minimum": 100,
+          "maximum": 2000,
+          "description": "Delay in milliseconds before auto-refresh triggers"
+        },
+        "bcObjectRange.excludePatterns": {
+          "type": "array",
+          "default": [
+            "**/node_modules/**",
+            "**/.altestrunner/**",
+            "**/.alpackages/**"
+          ],
+          "description": "Glob patterns to exclude from scanning",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "test:unit": "mocha ./out/test/unit/**/*.test.js"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.74.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "@vscode/test-electron": "^2.3.8",
+    "eslint": "^8.56.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.2.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "zod": "^3.22.4"
+  }
+}
