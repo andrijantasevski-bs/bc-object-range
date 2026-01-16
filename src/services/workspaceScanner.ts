@@ -1,6 +1,13 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { ALProject, ALObject } from "../types/index.js";
+import {
+  ALProject,
+  ALObject,
+  ALObjectTypeWithId,
+  IdRange,
+  SharedIdGap,
+  IdConflict,
+} from "../types/index.js";
 import { parseAppJson } from "../models/schemas.js";
 import { alObjectParser } from "../parsers/alObjectParser.js";
 
@@ -209,6 +216,158 @@ export class WorkspaceScanner {
       return null;
     }
     return gaps[0].start;
+  }
+
+  /**
+   * Get the union of all ID ranges across all projects (for shared mode)
+   */
+  public getSharedRanges(projects: ALProject[]): IdRange[] {
+    // Collect all ranges from all projects
+    const allRanges: IdRange[] = [];
+    for (const project of projects) {
+      allRanges.push(...project.idRanges);
+    }
+
+    if (allRanges.length === 0) {
+      return [];
+    }
+
+    // Sort ranges by 'from' value
+    allRanges.sort((a, b) => a.from - b.from);
+
+    // Merge overlapping/adjacent ranges
+    const merged: IdRange[] = [{ ...allRanges[0] }];
+
+    for (let i = 1; i < allRanges.length; i++) {
+      const current = allRanges[i];
+      const last = merged[merged.length - 1];
+
+      if (current.from <= last.to + 1) {
+        // Ranges overlap or are adjacent - merge them
+        last.to = Math.max(last.to, current.to);
+      } else {
+        // No overlap - add as new range
+        merged.push({ ...current });
+      }
+    }
+
+    return merged;
+  }
+
+  /**
+   * Calculate gaps for a specific object type across all projects (shared mode)
+   */
+  public calculateSharedGaps(
+    projects: ALProject[],
+    objectType: ALObjectTypeWithId
+  ): SharedIdGap[] {
+    const gaps: SharedIdGap[] = [];
+    const sharedRanges = this.getSharedRanges(projects);
+
+    if (sharedRanges.length === 0) {
+      return gaps;
+    }
+
+    // Collect all used IDs of this object type across all projects
+    const usedIds = new Set<number>();
+    for (const project of projects) {
+      for (const obj of project.objects) {
+        if (obj.type === objectType) {
+          usedIds.add(obj.id);
+        }
+      }
+    }
+
+    // Find gaps in the shared ranges
+    for (const range of sharedRanges) {
+      let gapStart: number | null = null;
+
+      for (let id = range.from; id <= range.to; id++) {
+        if (!usedIds.has(id)) {
+          if (gapStart === null) {
+            gapStart = id;
+          }
+        } else {
+          if (gapStart !== null) {
+            gaps.push({
+              start: gapStart,
+              end: id - 1,
+              count: id - gapStart,
+              objectType,
+            });
+            gapStart = null;
+          }
+        }
+      }
+
+      // Close any gap that extends to the end of the range
+      if (gapStart !== null) {
+        gaps.push({
+          start: gapStart,
+          end: range.to,
+          count: range.to - gapStart + 1,
+          objectType,
+        });
+      }
+    }
+
+    return gaps;
+  }
+
+  /**
+   * Get the next available ID for a specific object type across all projects (shared mode)
+   */
+  public getNextAvailableIdForType(
+    projects: ALProject[],
+    objectType: ALObjectTypeWithId
+  ): number | null {
+    const gaps = this.calculateSharedGaps(projects, objectType);
+    if (gaps.length === 0) {
+      return null;
+    }
+    return gaps[0].start;
+  }
+
+  /**
+   * Detect ID conflicts across projects (same object type + ID in multiple projects)
+   */
+  public detectConflicts(projects: ALProject[]): IdConflict[] {
+    const conflicts: IdConflict[] = [];
+
+    // Map: "type:id" -> ALObject[]
+    const objectMap = new Map<string, ALObject[]>();
+
+    for (const project of projects) {
+      for (const obj of project.objects) {
+        const key = `${obj.type}:${obj.id}`;
+        const existing = objectMap.get(key) || [];
+        existing.push(obj);
+        objectMap.set(key, existing);
+      }
+    }
+
+    // Find entries with multiple objects (conflicts)
+    for (const [, objects] of objectMap) {
+      if (objects.length > 1) {
+        // Check if objects are from different projects (by file path)
+        const uniquePaths = new Set(objects.map((o) => path.dirname(o.filePath)));
+        if (uniquePaths.size > 1) {
+          conflicts.push({
+            id: objects[0].id,
+            type: objects[0].type,
+            objects,
+          });
+        }
+      }
+    }
+
+    // Sort by type, then by ID
+    conflicts.sort((a, b) => {
+      const typeCompare = a.type.localeCompare(b.type);
+      return typeCompare !== 0 ? typeCompare : a.id - b.id;
+    });
+
+    return conflicts;
   }
 }
 

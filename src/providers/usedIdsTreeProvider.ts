@@ -1,10 +1,11 @@
 import * as vscode from "vscode";
-import { ALProject, ALObject, ObjectsByType } from "../types/index.js";
+import { ALProject, ALObject, ObjectsByType, IdConflict } from "../types/index.js";
+import { workspaceScanner } from "../services/workspaceScanner.js";
 
 /**
  * Tree item types for the Used IDs view
  */
-type TreeItemType = "project" | "objectType" | "object";
+type TreeItemType = "project" | "objectType" | "object" | "conflictsRoot" | "conflict";
 
 /**
  * Base tree item for the Used IDs view
@@ -15,11 +16,13 @@ interface UsedIdsTreeItemData {
   project?: ALProject;
   objectType?: string;
   object?: ALObject;
+  conflict?: IdConflict;
 }
 
 /**
  * TreeDataProvider for displaying used object IDs organized by project and object type.
  * Hierarchy: App → Object Type → Objects (ID + name)
+ * In shared mode, also shows ID conflicts across projects.
  */
 export class UsedIdsTreeProvider
   implements vscode.TreeDataProvider<UsedIdsTreeItemData>
@@ -30,14 +33,29 @@ export class UsedIdsTreeProvider
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private projects: ALProject[] = [];
+  private conflicts: IdConflict[] = [];
 
   constructor() {}
+
+  /**
+   * Check if shared range mode is enabled
+   */
+  private isSharedRangeMode(): boolean {
+    const config = vscode.workspace.getConfiguration("bcObjectRange");
+    return config.get<boolean>("sharedRangeMode", false);
+  }
 
   /**
    * Update the projects data and refresh the tree
    */
   public setProjects(projects: ALProject[]): void {
     this.projects = projects;
+    // Detect conflicts in shared mode
+    if (this.isSharedRangeMode()) {
+      this.conflicts = workspaceScanner.detectConflicts(projects);
+    } else {
+      this.conflicts = [];
+    }
     this.refresh();
   }
 
@@ -55,6 +73,52 @@ export class UsedIdsTreeProvider
     const treeItem = new vscode.TreeItem(element.label);
 
     switch (element.type) {
+      case "conflictsRoot":
+        treeItem.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
+        treeItem.iconPath = new vscode.ThemeIcon(
+          "warning",
+          new vscode.ThemeColor("editorWarning.foreground")
+        );
+        treeItem.tooltip = "Objects with the same type and ID exist in multiple projects";
+        treeItem.description = `${this.conflicts.length} conflicts`;
+        treeItem.contextValue = "conflictsRoot";
+        break;
+
+      case "conflict": {
+        const conflict = element.conflict!;
+        const projectNames = [
+          ...new Set(
+            conflict.objects.map((o) => {
+              const project = this.projects.find((p) =>
+                o.filePath.startsWith(p.rootPath)
+              );
+              return project?.name || "Unknown";
+            })
+          ),
+        ].join(", ");
+        treeItem.collapsibleState = vscode.TreeItemCollapsibleState.None;
+        treeItem.iconPath = new vscode.ThemeIcon(
+          "error",
+          new vscode.ThemeColor("editorError.foreground")
+        );
+        treeItem.tooltip = new vscode.MarkdownString(
+          `**Conflict:** ${conflict.type} ${conflict.id}\n\n` +
+            `Used in: ${projectNames}\n\n` +
+            conflict.objects
+              .map((o) => `- ${o.name} (${o.filePath})`)
+              .join("\n")
+        );
+        treeItem.description = projectNames;
+        treeItem.contextValue = "conflict";
+        // Open first conflicting file on click
+        treeItem.command = {
+          command: "bcObjectRange.openFile",
+          title: "Open File",
+          arguments: [conflict.objects[0]],
+        };
+        break;
+      }
+
       case "project":
         treeItem.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
         treeItem.iconPath = new vscode.ThemeIcon("folder-library");
@@ -77,23 +141,38 @@ export class UsedIdsTreeProvider
         break;
       }
 
-      case "object":
+      case "object": {
+        const obj = element.object!;
+        // Check if this object has a conflict in shared mode
+        const hasConflict =
+          this.isSharedRangeMode() &&
+          this.conflicts.some(
+            (c) => c.type === obj.type && c.id === obj.id
+          );
+
         treeItem.collapsibleState = vscode.TreeItemCollapsibleState.None;
-        treeItem.iconPath = this.getObjectTypeIcon(element.object!.type);
+        treeItem.iconPath = hasConflict
+          ? new vscode.ThemeIcon(
+              "warning",
+              new vscode.ThemeColor("editorWarning.foreground")
+            )
+          : this.getObjectTypeIcon(obj.type);
         treeItem.tooltip = new vscode.MarkdownString(
-          `**${element.object!.type}** ${element.object!.id} "${
-            element.object!.name
-          }"\n\n` +
-            `File: ${element.object!.filePath}\n\n` +
-            `Line: ${element.object!.lineNumber}`
+          `**${obj.type}** ${obj.id} "${obj.name}"\n\n` +
+            `File: ${obj.filePath}\n\n` +
+            `Line: ${obj.lineNumber}` +
+            (hasConflict
+              ? "\n\n⚠️ **Conflict:** This ID is used by another project"
+              : "")
         );
         treeItem.command = {
           command: "bcObjectRange.openFile",
           title: "Open File",
-          arguments: [element.object],
+          arguments: [obj],
         };
-        treeItem.contextValue = "object";
+        treeItem.contextValue = hasConflict ? "objectConflict" : "object";
         break;
+      }
     }
 
     return treeItem;
@@ -104,11 +183,35 @@ export class UsedIdsTreeProvider
    */
   public getChildren(element?: UsedIdsTreeItemData): UsedIdsTreeItemData[] {
     if (!element) {
-      // Root level: return projects
-      return this.projects.map((project) => ({
-        type: "project" as const,
-        label: project.name,
-        project,
+      // Root level
+      const items: UsedIdsTreeItemData[] = [];
+
+      // In shared mode, show conflicts section first if there are any
+      if (this.isSharedRangeMode() && this.conflicts.length > 0) {
+        items.push({
+          type: "conflictsRoot" as const,
+          label: "⚠️ ID Conflicts",
+        });
+      }
+
+      // Then show projects
+      items.push(
+        ...this.projects.map((project) => ({
+          type: "project" as const,
+          label: project.name,
+          project,
+        }))
+      );
+
+      return items;
+    }
+
+    if (element.type === "conflictsRoot") {
+      // Show individual conflicts
+      return this.conflicts.map((conflict) => ({
+        type: "conflict" as const,
+        label: `${this.formatObjectTypeName(conflict.type)} ${conflict.id}`,
+        conflict,
       }));
     }
 

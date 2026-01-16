@@ -120,3 +120,29 @@ export interface WorkspaceAnalysis {
   /** Timestamp of the analysis */
   timestamp: Date;
 }
+
+/**
+ * Represents a gap in shared range mode (per object type)
+ */
+export interface SharedIdGap {
+  /** Start of the unused range */
+  start: number;
+  /** End of the unused range (inclusive) */
+  end: number;
+  /** Number of available IDs in this gap */
+  count: number;
+  /** The object type this gap is for */
+  objectType: ALObjectTypeWithId;
+}
+
+/**
+ * Represents a conflict where the same ID+type is used in multiple projects
+ */
+export interface IdConflict {
+  /** The conflicting ID */
+  id: number;
+  /** The object type */
+  type: ALObjectTypeWithId;
+  /** Objects from different projects using this ID */
+  objects: ALObject[];
+}

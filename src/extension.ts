@@ -3,7 +3,12 @@ import { workspaceScanner } from "./services/workspaceScanner.js";
 import { ALFileWatcher } from "./services/fileWatcher.js";
 import { UsedIdsTreeProvider } from "./providers/usedIdsTreeProvider.js";
 import { UnusedIdsTreeProvider } from "./providers/unusedIdsTreeProvider.js";
-import { ALObject, IdGap } from "./types/index.js";
+import {
+  ALObject,
+  IdGap,
+  AL_OBJECT_TYPES_WITH_ID,
+  ALObjectTypeWithId,
+} from "./types/index.js";
 
 let usedIdsProvider: UsedIdsTreeProvider;
 let unusedIdsProvider: UnusedIdsTreeProvider;
@@ -55,11 +60,49 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const copyNextIdCommand = vscode.commands.registerCommand(
     "bcObjectRange.copyNextId",
-    async (gap: IdGap) => {
+    async (gap?: IdGap) => {
+      const config = vscode.workspace.getConfiguration("bcObjectRange");
+      const sharedMode = config.get<boolean>("sharedRangeMode", false);
+
       if (gap && gap.start) {
+        // Called from tree view with a specific gap
         await vscode.env.clipboard.writeText(gap.start.toString());
         vscode.window.showInformationMessage(
           `Copied ID ${gap.start} to clipboard`
+        );
+      } else if (sharedMode) {
+        // In shared mode without a gap, show quick pick for object type
+        const items = AL_OBJECT_TYPES_WITH_ID.map((type) => {
+          const nextId = unusedIdsProvider.getNextAvailableIdForType(type);
+          return {
+            label: type.charAt(0).toUpperCase() + type.slice(1),
+            description: nextId ? `Next: ${nextId}` : "No IDs available",
+            objectType: type as ALObjectTypeWithId,
+            nextId,
+          };
+        }).filter((item) => item.nextId !== null);
+
+        if (items.length === 0) {
+          vscode.window.showWarningMessage(
+            "No available IDs in the shared range"
+          );
+          return;
+        }
+
+        const selected = await vscode.window.showQuickPick(items, {
+          placeHolder: "Select object type to get next available ID",
+          title: "Copy Next Available ID (Shared Mode)",
+        });
+
+        if (selected && selected.nextId) {
+          await vscode.env.clipboard.writeText(selected.nextId.toString());
+          vscode.window.showInformationMessage(
+            `Copied ID ${selected.nextId} for ${selected.label} to clipboard`
+          );
+        }
+      } else {
+        vscode.window.showInformationMessage(
+          "Click on a gap in the Unused IDs view to copy its ID"
         );
       }
     }
@@ -83,6 +126,15 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   );
 
+  // Listen for configuration changes
+  const configChangeListener = vscode.workspace.onDidChangeConfiguration(
+    (e) => {
+      if (e.affectsConfiguration("bcObjectRange.sharedRangeMode")) {
+        refreshAnalysis();
+      }
+    }
+  );
+
   // Add to subscriptions
   context.subscriptions.push(
     usedIdsView,
@@ -91,7 +143,8 @@ export function activate(context: vscode.ExtensionContext): void {
     analyzeCommand,
     refreshCommand,
     copyNextIdCommand,
-    openFileCommand
+    openFileCommand,
+    configChangeListener
   );
 
   // Perform initial analysis
