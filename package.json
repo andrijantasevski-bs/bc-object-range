@@ -15,7 +15,8 @@
     "Other"
   ],
   "activationEvents": [
-    "workspaceContains:**/app.json"
+    "workspaceContains:**/app.json",
+    "onLanguage:al"
   ],
   "main": "./out/extension.js",
   "contributes": {

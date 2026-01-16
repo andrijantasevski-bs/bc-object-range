@@ -3,6 +3,7 @@ import { workspaceScanner } from "./services/workspaceScanner.js";
 import { ALFileWatcher } from "./services/fileWatcher.js";
 import { UsedIdsTreeProvider } from "./providers/usedIdsTreeProvider.js";
 import { UnusedIdsTreeProvider } from "./providers/unusedIdsTreeProvider.js";
+import { ObjectIdCompletionProvider } from "./providers/objectIdCompletionProvider.js";
 import {
   ALObject,
   IdGap,
@@ -13,6 +14,7 @@ import {
 let usedIdsProvider: UsedIdsTreeProvider;
 let unusedIdsProvider: UnusedIdsTreeProvider;
 let fileWatcher: ALFileWatcher;
+let completionProvider: ObjectIdCompletionProvider;
 
 /**
  * Extension activation
@@ -23,6 +25,18 @@ export function activate(context: vscode.ExtensionContext): void {
   // Create tree data providers
   usedIdsProvider = new UsedIdsTreeProvider();
   unusedIdsProvider = new UnusedIdsTreeProvider();
+
+  // Create completion provider for AL object IDs
+  completionProvider = new ObjectIdCompletionProvider(workspaceScanner);
+
+  // Register completion provider for AL files
+  // Triggers on space (after typing object type keyword) and manually via Ctrl+Space
+  const completionProviderRegistration =
+    vscode.languages.registerCompletionItemProvider(
+      { language: "al", scheme: "file" },
+      completionProvider,
+      " " // Trigger on space after object type keyword
+    );
 
   // Register tree views
   const usedIdsView = vscode.window.createTreeView("bcObjectRange.usedIds", {
@@ -144,7 +158,8 @@ export function activate(context: vscode.ExtensionContext): void {
     refreshCommand,
     copyNextIdCommand,
     openFileCommand,
-    configChangeListener
+    configChangeListener,
+    completionProviderRegistration
   );
 
   // Perform initial analysis
@@ -159,6 +174,7 @@ async function refreshAnalysis(): Promise<void> {
     const projects = await workspaceScanner.scanWorkspace();
     usedIdsProvider.setProjects(projects);
     unusedIdsProvider.setProjects(projects);
+    completionProvider.setProjects(projects);
 
     // Show summary message if there are projects
     if (projects.length > 0) {
