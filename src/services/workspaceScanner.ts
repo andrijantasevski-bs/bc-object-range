@@ -350,7 +350,9 @@ export class WorkspaceScanner {
     for (const [, objects] of objectMap) {
       if (objects.length > 1) {
         // Check if objects are from different projects (by file path)
-        const uniquePaths = new Set(objects.map((o) => path.dirname(o.filePath)));
+        const uniquePaths = new Set(
+          objects.map((o) => path.dirname(o.filePath))
+        );
         if (uniquePaths.size > 1) {
           conflicts.push({
             id: objects[0].id,

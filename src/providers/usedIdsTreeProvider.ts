@@ -1,11 +1,21 @@
 import * as vscode from "vscode";
-import { ALProject, ALObject, ObjectsByType, IdConflict } from "../types/index.js";
+import {
+  ALProject,
+  ALObject,
+  ObjectsByType,
+  IdConflict,
+} from "../types/index.js";
 import { workspaceScanner } from "../services/workspaceScanner.js";
 
 /**
  * Tree item types for the Used IDs view
  */
-type TreeItemType = "project" | "objectType" | "object" | "conflictsRoot" | "conflict";
+type TreeItemType =
+  | "project"
+  | "objectType"
+  | "object"
+  | "conflictsRoot"
+  | "conflict";
 
 /**
  * Base tree item for the Used IDs view
@@ -79,7 +89,8 @@ export class UsedIdsTreeProvider
           "warning",
           new vscode.ThemeColor("editorWarning.foreground")
         );
-        treeItem.tooltip = "Objects with the same type and ID exist in multiple projects";
+        treeItem.tooltip =
+          "Objects with the same type and ID exist in multiple projects";
         treeItem.description = `${this.conflicts.length} conflicts`;
         treeItem.contextValue = "conflictsRoot";
         break;
@@ -146,9 +157,7 @@ export class UsedIdsTreeProvider
         // Check if this object has a conflict in shared mode
         const hasConflict =
           this.isSharedRangeMode() &&
-          this.conflicts.some(
-            (c) => c.type === obj.type && c.id === obj.id
-          );
+          this.conflicts.some((c) => c.type === obj.type && c.id === obj.id);
 
         treeItem.collapsibleState = vscode.TreeItemCollapsibleState.None;
         treeItem.iconPath = hasConflict

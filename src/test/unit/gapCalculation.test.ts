@@ -389,8 +389,18 @@ class SharedRangeCalculator {
   public calculateSharedGaps(
     projects: ALProject[],
     objectType: ALObjectTypeWithId
-  ): { start: number; end: number; count: number; objectType: ALObjectTypeWithId }[] {
-    const gaps: { start: number; end: number; count: number; objectType: ALObjectTypeWithId }[] = [];
+  ): {
+    start: number;
+    end: number;
+    count: number;
+    objectType: ALObjectTypeWithId;
+  }[] {
+    const gaps: {
+      start: number;
+      end: number;
+      count: number;
+      objectType: ALObjectTypeWithId;
+    }[] = [];
     const sharedRanges = this.getSharedRanges(projects);
 
     if (sharedRanges.length === 0) {
@@ -462,7 +472,11 @@ class SharedRangeCalculator {
   public detectConflicts(
     projects: ALProject[]
   ): { id: number; type: ALObjectTypeWithId; objects: ALProject["objects"] }[] {
-    const conflicts: { id: number; type: ALObjectTypeWithId; objects: ALProject["objects"] }[] = [];
+    const conflicts: {
+      id: number;
+      type: ALObjectTypeWithId;
+      objects: ALProject["objects"];
+    }[] = [];
     const objectMap = new Map<string, ALProject["objects"][0][]>();
 
     for (const project of projects) {
@@ -476,11 +490,13 @@ class SharedRangeCalculator {
 
     for (const [, objects] of objectMap) {
       if (objects.length > 1) {
-        const uniquePaths = new Set(objects.map((o) => {
-          // Extract project root from path
-          const parts = o.filePath.split("/");
-          return parts.slice(0, 3).join("/");
-        }));
+        const uniquePaths = new Set(
+          objects.map((o) => {
+            // Extract project root from path
+            const parts = o.filePath.split("/");
+            return parts.slice(0, 3).join("/");
+          })
+        );
         if (uniquePaths.size > 1) {
           conflicts.push({
             id: objects[0].id,

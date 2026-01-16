@@ -253,9 +253,7 @@ export class UnusedIdsTreeProvider
         ];
       }
 
-      const rangeStr = sharedRanges
-        .map((r) => `${r.from}-${r.to}`)
-        .join(", ");
+      const rangeStr = sharedRanges.map((r) => `${r.from}-${r.to}`).join(", ");
 
       return [
         {
@@ -384,9 +382,7 @@ export class UnusedIdsTreeProvider
 
     if (element.type === "objectType") {
       const sharedRanges = workspaceScanner.getSharedRanges(this.projects);
-      const rangeStr = sharedRanges
-        .map((r) => `${r.from}-${r.to}`)
-        .join(", ");
+      const rangeStr = sharedRanges.map((r) => `${r.from}-${r.to}`).join(", ");
       return {
         type: "sharedRoot",
         label: `Shared Range (${rangeStr})`,
@@ -432,7 +428,10 @@ export class UnusedIdsTreeProvider
   public getNextAvailableIdForType(
     objectType: ALObjectTypeWithId
   ): number | null {
-    return workspaceScanner.getNextAvailableIdForType(this.projects, objectType);
+    return workspaceScanner.getNextAvailableIdForType(
+      this.projects,
+      objectType
+    );
   }
 
   /**
