@@ -109,11 +109,11 @@ Shows available ID ranges within your configured `idRanges`:
 
 Available from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 
-| Command                                     | Description                                                  |
-| ------------------------------------------- | ------------------------------------------------------------ |
-| **BC Object Range: Analyze Object Ranges**  | Manually trigger a full workspace scan                       |
-| **BC Object Range: Refresh**                | Force refresh the views                                      |
-| **BC Object Range: Copy Next Available ID** | Copy the next available ID (shows picker in shared mode)     |
+| Command                                     | Description                                              |
+| ------------------------------------------- | -------------------------------------------------------- |
+| **BC Object Range: Analyze Object Ranges**  | Manually trigger a full workspace scan                   |
+| **BC Object Range: Refresh**                | Force refresh the views                                  |
+| **BC Object Range: Copy Next Available ID** | Copy the next available ID (shows picker in shared mode) |
 
 ---
 
@@ -121,14 +121,15 @@ Available from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 
 Open VS Code Settings (`Ctrl+,`) and search for "bcObjectRange":
 
-| Setting                            | Type    | Default  | Description                                                          |
-| ---------------------------------- | ------- | -------- | -------------------------------------------------------------------- |
-| `bcObjectRange.autoRefresh`        | boolean | `true`   | Automatically refresh when `.al` files change                        |
-| `bcObjectRange.autoRefreshDelay`   | number  | `300`    | Delay in milliseconds before auto-refresh triggers (100-2000)        |
-| `bcObjectRange.excludePatterns`    | array   | (see below) | Glob patterns to exclude from scanning                            |
-| `bcObjectRange.sharedRangeMode`    | boolean | `false`  | Enable shared range mode for multi-app scenarios (see below)         |
+| Setting                          | Type    | Default     | Description                                                   |
+| -------------------------------- | ------- | ----------- | ------------------------------------------------------------- |
+| `bcObjectRange.autoRefresh`      | boolean | `true`      | Automatically refresh when `.al` files change                 |
+| `bcObjectRange.autoRefreshDelay` | number  | `300`       | Delay in milliseconds before auto-refresh triggers (100-2000) |
+| `bcObjectRange.excludePatterns`  | array   | (see below) | Glob patterns to exclude from scanning                        |
+| `bcObjectRange.sharedRangeMode`  | boolean | `false`     | Enable shared range mode for multi-app scenarios (see below)  |
 
 **Default exclude patterns:**
+
 ```json
 ["**/node_modules/**", "**/.altestrunner/**", "**/.alpackages/**"]
 ```
@@ -155,12 +156,12 @@ Open VS Code Settings (`Ctrl+,`) and search for "bcObjectRange":
 
 The extension operates in one of two modes:
 
-| Aspect                          | Normal Mode (default)                     | Shared Range Mode                                 |
-| ------------------------------- | ----------------------------------------- | ------------------------------------------------- |
-| **Use case**                    | Each app has its own dedicated ID range   | Multiple apps share the same ID range (OnPrem)    |
-| **Gap calculation**             | Per-project                               | Per-object-type across all projects               |
-| **Same ID in different apps**   | OK (they have different ranges)           | **Conflict** (shows warning)                      |
-| **"Next available ID"**         | Per project                               | Per object type across all projects               |
+| Aspect                        | Normal Mode (default)                   | Shared Range Mode                              |
+| ----------------------------- | --------------------------------------- | ---------------------------------------------- |
+| **Use case**                  | Each app has its own dedicated ID range | Multiple apps share the same ID range (OnPrem) |
+| **Gap calculation**           | Per-project                             | Per-object-type across all projects            |
+| **Same ID in different apps** | OK (they have different ranges)         | **Conflict** (shows warning)                   |
+| **"Next available ID"**       | Per project                             | Per object type across all projects            |
 
 ### When to use Shared Range Mode
 
@@ -203,6 +204,7 @@ This is because in AL, different object types can share the same ID number. For 
 When two projects have objects with the same type AND same ID, the extension shows warnings:
 
 **In the Used IDs view:**
+
 ```
 ⚠️ ID Conflicts (2 conflicts)
 ├── ❌ table 50000 — App1, App2
@@ -303,6 +305,7 @@ All three objects will be detected and listed separately.
 ### Example 1: Single App (Normal Mode)
 
 **Workspace structure:**
+
 ```
 my-extension/
 ├── app.json          ← idRanges: [{ from: 50000, to: 50099 }]
@@ -314,6 +317,7 @@ my-extension/
 ```
 
 **Used IDs view:**
+
 ```
 📁 My Extension (3 objects)
 ├── 📄 Table (2)
@@ -324,6 +328,7 @@ my-extension/
 ```
 
 **Unused IDs view:**
+
 ```
 📁 My Extension (97 IDs available)
 └── ⭕ 50002 - 50099 (98 IDs)
@@ -334,6 +339,7 @@ my-extension/
 ### Example 2: Multiple Apps with Shared Range
 
 **Workspace structure:**
+
 ```
 workspace/
 ├── core-app/
@@ -348,6 +354,7 @@ workspace/
 ```
 
 **settings.json:**
+
 ```json
 {
   "bcObjectRange.sharedRangeMode": true
@@ -355,6 +362,7 @@ workspace/
 ```
 
 **Unused IDs view (shared mode):**
+
 ```
 📁 Shared Range (50000-50119)
 ├── 📄 Table
@@ -372,6 +380,7 @@ workspace/
 If `sales-app` accidentally creates `table 50000` (same as `core-app`):
 
 **Used IDs view:**
+
 ```
 ⚠️ ID Conflicts (1 conflict)
 └── ❌ table 50000 — core-app, sales-app
@@ -390,14 +399,14 @@ If `sales-app` accidentally creates `table 50000` (same as `core-app`):
 
 ## Known Limitations
 
-| Limitation                | Description                                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **No ID validation**      | The extension doesn't validate if objects are within the configured range. It only reports what's found.|
-| **No field ID tracking**  | Table field IDs and enum value IDs are not tracked, only top-level object IDs.                          |
-| **No real-time sync**     | Changes are detected via file watching, but there may be a brief delay.                                 |
-| **Objects without IDs**   | `interface`, `controladdin`, `profile`, `pagecustomization`, `entitlement`, and `dotnet` are not tracked.|
-| **Extension objects**     | Extension objects use their own ID namespace; base object IDs are not resolved.                         |
-| **Symbol references**     | The extension only parses local `.al` files. It doesn't read symbols from `.alpackages` or dependencies.|
+| Limitation               | Description                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| **No ID validation**     | The extension doesn't validate if objects are within the configured range. It only reports what's found.  |
+| **No field ID tracking** | Table field IDs and enum value IDs are not tracked, only top-level object IDs.                            |
+| **No real-time sync**    | Changes are detected via file watching, but there may be a brief delay.                                   |
+| **Objects without IDs**  | `interface`, `controladdin`, `profile`, `pagecustomization`, `entitlement`, and `dotnet` are not tracked. |
+| **Extension objects**    | Extension objects use their own ID namespace; base object IDs are not resolved.                           |
+| **Symbol references**    | The extension only parses local `.al` files. It doesn't read symbols from `.alpackages` or dependencies.  |
 
 ---
 
@@ -454,7 +463,7 @@ If `sales-app` accidentally creates `table 50000` (same as `core-app`):
 ### 0.1.0
 
 - **NEW:** Shared Range Mode for multi-app scenarios with shared ID ranges
-- **NEW:** Conflict detection when same type+ID is used across projects  
+- **NEW:** Conflict detection when same type+ID is used across projects
 - **NEW:** Per-object-type gap calculation in shared mode
 - **NEW:** Quick pick for object type selection when copying next ID
 
