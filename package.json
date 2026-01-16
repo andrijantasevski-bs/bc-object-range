@@ -2,7 +2,7 @@
   "name": "bc-object-range",
   "displayName": "BC Object Range Analyzer",
   "description": "Analyze AL object ID range usage in Business Central projects",
-  "version": "0.4.3",
+  "version": "0.5.1",
   "publisher": "AndrijanTasevski",
   "icon": "images/bc-object-range-analyzer.png",
   "repository": {
@@ -19,7 +19,7 @@
     "workspaceContains:**/app.json",
     "onLanguage:al"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -146,9 +146,11 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "pnpm run compile",
+    "vscode:prepublish": "pnpm run package",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "watch:esbuild": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
     "pretest": "pnpm run compile && pnpm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
@@ -163,6 +165,8 @@
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.27.2",
     "eslint": "^8.56.0",
     "glob": "^10.3.10",
     "mocha": "^10.2.0",

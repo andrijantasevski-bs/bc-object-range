@@ -1,7 +1,8 @@
 .vscode/**
 .github/**
 src/**
-out/test/**
+out/**
+node_modules/**
 **/*.map
 .gitignore
 .mocharc.json
@@ -10,4 +11,8 @@ pnpm-lock.yaml
 **/*.ts
 scripts/**
 images/*.svg
-!images/icon.png
+images/*-og.png
+!images/bc-object-range-analyzer.png
+esbuild.js
+.npmrc
+*.vsix

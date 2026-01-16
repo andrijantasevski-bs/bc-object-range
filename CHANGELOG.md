@@ -2,6 +2,15 @@
 
 All notable changes to the "BC Object Range Analyzer" extension will be documented in this file.
 
+## [0.5.1] - 2026-01-16
+
+### Changed
+
+- **Bundled extension with esbuild** for significantly improved performance and smaller package size
+  - Package size reduced from 1.6MB (315 files) to 69KB (9 files)
+  - Single bundled JavaScript file instead of multiple individual files
+  - Faster extension activation and loading
+
 ## [0.5.0] - 2026-01-16
 
 ### Added
