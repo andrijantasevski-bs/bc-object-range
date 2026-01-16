@@ -2,6 +2,12 @@
 
 All notable changes to the "BC Object Range Analyzer" extension will be documented in this file.
 
+## [0.4.1] - 2026-01-16
+
+### Fixed
+
+- Fixed CI/CD workflows pnpm version conflict by using `packageManager` field from package.json instead of hardcoding version in GitHub Actions
+
 ## [0.4.0] - 2026-01-16
 
 ### Changed
