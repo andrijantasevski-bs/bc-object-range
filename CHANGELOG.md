@@ -2,6 +2,13 @@
 
 All notable changes to the "BC Object Range Analyzer" extension will be documented in this file.
 
+## [0.4.3] - 2026-01-16
+
+### Added
+
+- Added extension icon for VS Code marketplace
+- Automated publishing to VS Code marketplace on release
+
 ## [0.4.2] - 2026-01-16
 
 ### Fixed

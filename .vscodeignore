@@ -8,4 +8,6 @@ out/test/**
 tsconfig.json
 pnpm-lock.yaml
 **/*.ts
-!node_modules/**
+scripts/**
+images/*.svg
+!images/icon.png
