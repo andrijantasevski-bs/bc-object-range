@@ -4,7 +4,7 @@
   "description": "Analyze AL object ID range usage in Business Central projects",
   "version": "0.4.3",
   "publisher": "AndrijanTasevski",
-  "icon": "images/icon.png",
+  "icon": "images/bc-object-range-analyzer.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/andrijantasevski-bs/bc-object-range"
