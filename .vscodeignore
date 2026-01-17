@@ -13,6 +13,6 @@ scripts/**
 images/*.svg
 images/*-og.png
 !images/bc-object-range-analyzer.png
-esbuild.js
+esbuild.mjs
 .npmrc
 *.vsix
