@@ -115,7 +115,7 @@ suite("ALObjectParser Test Suite", () => {
         assert.strictEqual(
           objects.length,
           1,
-          `Expected 1 object for ${objDef.type}`
+          `Expected 1 object for ${objDef.type}`,
         );
         assert.strictEqual(objects[0].type, objDef.type);
         assert.strictEqual(objects[0].id, objDef.id);
@@ -328,7 +328,7 @@ Page 50001 "Mixed Case Page"
       assert.strictEqual(ALObjectParser.isValidObjectType("codeunit"), true);
       assert.strictEqual(
         ALObjectParser.isValidObjectType("permissionsetextension"),
-        true
+        true,
       );
     });
 
@@ -337,7 +337,7 @@ Page 50001 "Mixed Case Page"
       assert.strictEqual(ALObjectParser.isValidObjectType("interface"), false);
       assert.strictEqual(
         ALObjectParser.isValidObjectType("controladdin"),
-        false
+        false,
       );
     });
 
@@ -346,6 +346,378 @@ Page 50001 "Mixed Case Page"
       assert.strictEqual(types.length, 13);
       assert.ok(types.includes("table"));
       assert.ok(types.includes("permissionsetextension"));
+    });
+  });
+
+  suite("Field Parsing", () => {
+    test("should parse fields in a table", () => {
+      const content = `table 50000 "My Table"
+{
+    fields
+    {
+        field(1; "My Field"; Text[100])
+        {
+            Caption = 'My Field';
+        }
+        field(2; SecondField; Integer)
+        {
+            Caption = 'Second Field';
+        }
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/table.al");
+
+      assert.strictEqual(objects.length, 1);
+      assert.strictEqual(objects[0].fields?.length, 2);
+      assert.strictEqual(objects[0].fields![0].id, 1);
+      assert.strictEqual(objects[0].fields![0].name, "My Field");
+      assert.strictEqual(objects[0].fields![0].dataType, "Text[100]");
+      assert.strictEqual(objects[0].fields![1].id, 2);
+      assert.strictEqual(objects[0].fields![1].name, "SecondField");
+      assert.strictEqual(objects[0].fields![1].dataType, "Integer");
+    });
+
+    test("should parse fields in a tableextension with extends clause", () => {
+      const content = `tableextension 50068 "PTE INTL Gen. Jnl. Line" extends "Gen. Journal Line"
+{
+    fields
+    {
+        field(50060; "PTE INTL Customer Strategy"; Enum "PTE INTL Customer Strategy")
+        {
+            Caption = 'Strategy';
+            DataClassification = CustomerContent;
+        }
+        field(50061; "PTE INTL Secondary Code"; Code[20])
+        {
+            Caption = 'Secondary Code';
+        }
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/tableext.al");
+
+      assert.strictEqual(objects.length, 1);
+      assert.strictEqual(objects[0].type, "tableextension");
+      assert.strictEqual(objects[0].id, 50068);
+      assert.strictEqual(objects[0].name, "PTE INTL Gen. Jnl. Line");
+      assert.strictEqual(objects[0].extendsObject, "Gen. Journal Line");
+      assert.strictEqual(objects[0].fields?.length, 2);
+      assert.strictEqual(objects[0].fields![0].id, 50060);
+      assert.strictEqual(
+        objects[0].fields![0].name,
+        "PTE INTL Customer Strategy",
+      );
+      assert.strictEqual(
+        objects[0].fields![0].dataType,
+        'Enum "PTE INTL Customer Strategy"',
+      );
+      assert.strictEqual(objects[0].fields![1].id, 50061);
+      assert.strictEqual(objects[0].fields![1].name, "PTE INTL Secondary Code");
+      assert.strictEqual(objects[0].fields![1].dataType, "Code[20]");
+    });
+
+    test("should parse extends clause with unquoted name", () => {
+      const content = `tableextension 50000 MyExtension extends Customer
+{
+    fields
+    {
+        field(50000; MyField; Integer)
+        {
+        }
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/tableext.al");
+
+      assert.strictEqual(objects.length, 1);
+      assert.strictEqual(objects[0].extendsObject, "Customer");
+    });
+
+    test("should handle fields block with brace on same line", () => {
+      const content = `table 50000 "My Table"
+{
+    fields {
+        field(1; MyField; Text[50])
+        {
+        }
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/table.al");
+
+      assert.strictEqual(objects.length, 1);
+      assert.strictEqual(objects[0].fields?.length, 1);
+      assert.strictEqual(objects[0].fields![0].id, 1);
+    });
+
+    test("should track correct line numbers for fields", () => {
+      const content = `table 50000 "My Table"
+{
+    fields
+    {
+        field(1; Field1; Integer)
+        {
+        }
+        field(2; Field2; Text[100])
+        {
+        }
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/table.al");
+
+      assert.strictEqual(objects[0].fields![0].lineNumber, 5);
+      assert.strictEqual(objects[0].fields![1].lineNumber, 8);
+    });
+
+    test("should not parse fields outside fields block", () => {
+      const content = `table 50000 "My Table"
+{
+    // field(1; FakeField; Integer) - this should not be parsed
+    fields
+    {
+        field(2; RealField; Integer)
+        {
+        }
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/table.al");
+
+      assert.strictEqual(objects[0].fields?.length, 1);
+      assert.strictEqual(objects[0].fields![0].id, 2);
+    });
+
+    test("should handle complex data types in fields", () => {
+      const content = `tableextension 50000 "My Ext" extends "Sales Header"
+{
+    fields
+    {
+        field(50000; EnumField; Enum "Sales Document Type")
+        {
+        }
+        field(50001; DecimalField; Decimal)
+        {
+        }
+        field(50002; CodeField; Code[20])
+        {
+        }
+        field(50003; OptionField; Option)
+        {
+            OptionMembers = A,B,C;
+        }
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/tableext.al");
+
+      assert.strictEqual(objects[0].fields?.length, 4);
+      assert.strictEqual(
+        objects[0].fields![0].dataType,
+        'Enum "Sales Document Type"',
+      );
+      assert.strictEqual(objects[0].fields![1].dataType, "Decimal");
+      assert.strictEqual(objects[0].fields![2].dataType, "Code[20]");
+      assert.strictEqual(objects[0].fields![3].dataType, "Option");
+    });
+  });
+
+  suite("Enum Value Parsing", () => {
+    test("should parse values in an enum", () => {
+      const content = `enum 50000 "My Enum"
+{
+    Extensible = true;
+    
+    value(0; None)
+    {
+        Caption = 'None';
+    }
+    value(1; "First Value")
+    {
+        Caption = 'First Value';
+    }
+    value(2; Second)
+    {
+        Caption = 'Second';
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/enum.al");
+
+      assert.strictEqual(objects.length, 1);
+      assert.strictEqual(objects[0].type, "enum");
+      assert.strictEqual(objects[0].enumValues?.length, 3);
+      assert.strictEqual(objects[0].enumValues![0].id, 0);
+      assert.strictEqual(objects[0].enumValues![0].name, "None");
+      assert.strictEqual(objects[0].enumValues![1].id, 1);
+      assert.strictEqual(objects[0].enumValues![1].name, "First Value");
+      assert.strictEqual(objects[0].enumValues![2].id, 2);
+      assert.strictEqual(objects[0].enumValues![2].name, "Second");
+    });
+
+    test("should parse values in an enumextension with extends clause", () => {
+      const content = `enumextension 50100 "My Enum Ext" extends "Base Enum"
+{
+    value(50100; "Extended Value")
+    {
+        Caption = 'Extended Value';
+    }
+    value(50101; AnotherValue)
+    {
+        Caption = 'Another Value';
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/enumext.al");
+
+      assert.strictEqual(objects.length, 1);
+      assert.strictEqual(objects[0].type, "enumextension");
+      assert.strictEqual(objects[0].extendsObject, "Base Enum");
+      assert.strictEqual(objects[0].enumValues?.length, 2);
+      assert.strictEqual(objects[0].enumValues![0].id, 50100);
+      assert.strictEqual(objects[0].enumValues![0].name, "Extended Value");
+      assert.strictEqual(objects[0].enumValues![1].id, 50101);
+      assert.strictEqual(objects[0].enumValues![1].name, "AnotherValue");
+    });
+
+    test("should track correct line numbers for enum values", () => {
+      const content = `enum 50000 MyEnum
+{
+    value(0; First)
+    {
+    }
+    value(1; Second)
+    {
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/enum.al");
+
+      assert.strictEqual(objects[0].enumValues![0].lineNumber, 3);
+      assert.strictEqual(objects[0].enumValues![1].lineNumber, 6);
+    });
+
+    test("should handle enumextension with unquoted extends", () => {
+      const content = `enumextension 50000 MyEnumExt extends BaseEnum
+{
+    value(50000; NewValue)
+    {
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/enumext.al");
+
+      assert.strictEqual(objects[0].extendsObject, "BaseEnum");
+      assert.strictEqual(objects[0].enumValues?.length, 1);
+    });
+  });
+
+  suite("Multiple Objects with Fields", () => {
+    test("should parse multiple objects with fields in single file", () => {
+      const content = `table 50000 "Table One"
+{
+    fields
+    {
+        field(1; Field1; Integer)
+        {
+        }
+    }
+}
+
+tableextension 50001 "Table Ext" extends Customer
+{
+    fields
+    {
+        field(50000; ExtField; Text[50])
+        {
+        }
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/combined.al");
+
+      assert.strictEqual(objects.length, 2);
+      assert.strictEqual(objects[0].fields?.length, 1);
+      assert.strictEqual(objects[0].fields![0].id, 1);
+      assert.strictEqual(objects[1].extendsObject, "Customer");
+      assert.strictEqual(objects[1].fields?.length, 1);
+      assert.strictEqual(objects[1].fields![0].id, 50000);
+    });
+
+    test("should not have fields array for non-table objects", () => {
+      const content = `codeunit 50000 "My Codeunit"
+{
+    trigger OnRun()
+    begin
+    end;
+}`;
+      const objects = parser.parseContent(content, "/test/codeunit.al");
+
+      assert.strictEqual(objects.length, 1);
+      assert.strictEqual(objects[0].fields, undefined);
+      assert.strictEqual(objects[0].enumValues, undefined);
+    });
+
+    test("should not have enumValues array for non-enum objects", () => {
+      const content = `page 50000 "My Page"
+{
+    PageType = Card;
+}`;
+      const objects = parser.parseContent(content, "/test/page.al");
+
+      assert.strictEqual(objects.length, 1);
+      assert.strictEqual(objects[0].fields, undefined);
+      assert.strictEqual(objects[0].enumValues, undefined);
+    });
+  });
+
+  suite("Edge Cases for Fields and Values", () => {
+    test("should handle table with no fields", () => {
+      const content = `table 50000 "Empty Table"
+{
+    fields
+    {
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/empty.al");
+
+      assert.strictEqual(objects.length, 1);
+      assert.strictEqual(objects[0].fields?.length, 0);
+    });
+
+    test("should handle enum with no values", () => {
+      const content = `enum 50000 "Empty Enum"
+{
+    Extensible = true;
+}`;
+      const objects = parser.parseContent(content, "/test/empty.al");
+
+      assert.strictEqual(objects.length, 1);
+      assert.strictEqual(objects[0].enumValues?.length, 0);
+    });
+
+    test("should handle field with special characters in name", () => {
+      const content = `table 50000 "My Table"
+{
+    fields
+    {
+        field(1; "My Field - (Test) [v2]"; Text[100])
+        {
+        }
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/special.al");
+
+      assert.strictEqual(objects[0].fields![0].name, "My Field - (Test) [v2]");
+    });
+
+    test("should ignore commented field declarations", () => {
+      const content = `table 50000 "My Table"
+{
+    fields
+    {
+        // field(1; CommentedField; Integer)
+        field(2; RealField; Integer)
+        {
+        }
+        /* field(3; MultiLineCommented; Text[50])
+        {
+        } */
+    }
+}`;
+      const objects = parser.parseContent(content, "/test/commented.al");
+
+      assert.strictEqual(objects[0].fields?.length, 1);
+      assert.strictEqual(objects[0].fields![0].id, 2);
     });
   });
 });

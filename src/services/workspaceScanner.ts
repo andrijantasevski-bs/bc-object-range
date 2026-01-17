@@ -8,9 +8,19 @@ import {
   IdRange,
   SharedIdGap,
   IdConflict,
+  ALObjectWithFields,
+  FieldConflict,
+  EnumValueConflict,
 } from "../types/index.js";
 import { parseAppJson } from "../models/schemas.js";
 import { alObjectParser } from "../parsers/alObjectParser.js";
+
+/**
+ * Extended AL project that stores objects with field/value information
+ */
+export interface ALProjectWithFields extends Omit<ALProject, "objects"> {
+  objects: ALObjectWithFields[];
+}
 
 /**
  * Scans the workspace for AL projects and parses their objects.
@@ -427,6 +437,246 @@ export class WorkspaceScanner {
     });
 
     return conflicts;
+  }
+
+  /**
+   * Detect field ID conflicts in tableextensions extending the same base table
+   * across multiple projects (shared mode).
+   *
+   * @param projects - The projects to analyze (must have objects with fields parsed)
+   * @returns Array of field conflicts grouped by base table
+   */
+  public detectFieldConflicts(
+    projects: ALProjectWithFields[],
+  ): FieldConflict[] {
+    const conflicts: FieldConflict[] = [];
+
+    // Map: "baseTable:fieldId" -> field info array
+    const fieldMap = new Map<
+      string,
+      Array<{
+        field: ALObjectWithFields["fields"] extends (infer T)[] | undefined
+          ? T
+          : never;
+        projectName: string;
+        extensionId: number;
+        extensionName: string;
+      }>
+    >();
+
+    for (const project of projects) {
+      for (const obj of project.objects) {
+        // Only process tableextensions with an extends clause and fields
+        if (
+          obj.type === "tableextension" &&
+          obj.extendsObject &&
+          obj.fields &&
+          obj.fields.length > 0
+        ) {
+          for (const field of obj.fields) {
+            const key = `${obj.extendsObject}:${field.id}`;
+            const existing = fieldMap.get(key) || [];
+            existing.push({
+              field,
+              projectName: project.name,
+              extensionId: obj.id,
+              extensionName: obj.name,
+            });
+            fieldMap.set(key, existing);
+          }
+        }
+      }
+    }
+
+    // Find entries with multiple fields (conflicts)
+    for (const [key, fieldInfos] of fieldMap) {
+      if (fieldInfos.length > 1) {
+        // Check if fields are from different projects
+        const uniqueProjects = new Set(fieldInfos.map((f) => f.projectName));
+        if (uniqueProjects.size > 1) {
+          const baseTable = key.split(":")[0];
+          const fieldId = parseInt(key.split(":")[1], 10);
+
+          conflicts.push({
+            fieldId,
+            baseTable,
+            fields: fieldInfos.map((info) => ({
+              ...info.field,
+              projectName: info.projectName,
+              extensionId: info.extensionId,
+              extensionName: info.extensionName,
+            })),
+          });
+        }
+      }
+    }
+
+    // Sort by base table, then by field ID
+    conflicts.sort((a, b) => {
+      const tableCompare = a.baseTable.localeCompare(b.baseTable);
+      return tableCompare !== 0 ? tableCompare : a.fieldId - b.fieldId;
+    });
+
+    return conflicts;
+  }
+
+  /**
+   * Detect enum value ID conflicts in enumextensions extending the same base enum
+   * across multiple projects (shared mode).
+   *
+   * @param projects - The projects to analyze (must have objects with enumValues parsed)
+   * @returns Array of enum value conflicts grouped by base enum
+   */
+  public detectEnumValueConflicts(
+    projects: ALProjectWithFields[],
+  ): EnumValueConflict[] {
+    const conflicts: EnumValueConflict[] = [];
+
+    // Map: "baseEnum:valueId" -> value info array
+    const valueMap = new Map<
+      string,
+      Array<{
+        value: ALObjectWithFields["enumValues"] extends (infer T)[] | undefined
+          ? T
+          : never;
+        projectName: string;
+        extensionId: number;
+        extensionName: string;
+      }>
+    >();
+
+    for (const project of projects) {
+      for (const obj of project.objects) {
+        // Only process enumextensions with an extends clause and values
+        if (
+          obj.type === "enumextension" &&
+          obj.extendsObject &&
+          obj.enumValues &&
+          obj.enumValues.length > 0
+        ) {
+          for (const value of obj.enumValues) {
+            const key = `${obj.extendsObject}:${value.id}`;
+            const existing = valueMap.get(key) || [];
+            existing.push({
+              value,
+              projectName: project.name,
+              extensionId: obj.id,
+              extensionName: obj.name,
+            });
+            valueMap.set(key, existing);
+          }
+        }
+      }
+    }
+
+    // Find entries with multiple values (conflicts)
+    for (const [key, valueInfos] of valueMap) {
+      if (valueInfos.length > 1) {
+        // Check if values are from different projects
+        const uniqueProjects = new Set(valueInfos.map((v) => v.projectName));
+        if (uniqueProjects.size > 1) {
+          const baseEnum = key.split(":")[0];
+          const valueId = parseInt(key.split(":")[1], 10);
+
+          conflicts.push({
+            valueId,
+            baseEnum,
+            values: valueInfos.map((info) => ({
+              ...info.value,
+              projectName: info.projectName,
+              extensionId: info.extensionId,
+              extensionName: info.extensionName,
+            })),
+          });
+        }
+      }
+    }
+
+    // Sort by base enum, then by value ID
+    conflicts.sort((a, b) => {
+      const enumCompare = a.baseEnum.localeCompare(b.baseEnum);
+      return enumCompare !== 0 ? enumCompare : a.valueId - b.valueId;
+    });
+
+    return conflicts;
+  }
+
+  /**
+   * Get all tableextensions grouped by the base table they extend.
+   * Useful for displaying in tree views.
+   *
+   * @param projects - The projects to analyze
+   * @returns Map of base table name to list of extensions with their project info
+   */
+  public getTableExtensionsByBase(
+    projects: ALProjectWithFields[],
+  ): Map<
+    string,
+    Array<{ obj: ALObjectWithFields; projectName: string; projectPath: string }>
+  > {
+    const result = new Map<
+      string,
+      Array<{
+        obj: ALObjectWithFields;
+        projectName: string;
+        projectPath: string;
+      }>
+    >();
+
+    for (const project of projects) {
+      for (const obj of project.objects) {
+        if (obj.type === "tableextension" && obj.extendsObject) {
+          const existing = result.get(obj.extendsObject) || [];
+          existing.push({
+            obj,
+            projectName: project.name,
+            projectPath: project.rootPath,
+          });
+          result.set(obj.extendsObject, existing);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Get all enumextensions grouped by the base enum they extend.
+   * Useful for displaying in tree views.
+   *
+   * @param projects - The projects to analyze
+   * @returns Map of base enum name to list of extensions with their project info
+   */
+  public getEnumExtensionsByBase(
+    projects: ALProjectWithFields[],
+  ): Map<
+    string,
+    Array<{ obj: ALObjectWithFields; projectName: string; projectPath: string }>
+  > {
+    const result = new Map<
+      string,
+      Array<{
+        obj: ALObjectWithFields;
+        projectName: string;
+        projectPath: string;
+      }>
+    >();
+
+    for (const project of projects) {
+      for (const obj of project.objects) {
+        if (obj.type === "enumextension" && obj.extendsObject) {
+          const existing = result.get(obj.extendsObject) || [];
+          existing.push({
+            obj,
+            projectName: project.name,
+            projectPath: project.rootPath,
+          });
+          result.set(obj.extendsObject, existing);
+        }
+      }
+    }
+
+    return result;
   }
 }
 

@@ -2,6 +2,26 @@
 
 All notable changes to the "BC Object Range Analyzer" extension will be documented in this file.
 
+## [0.6.0] - 2026-01-16
+
+### Added
+
+- **Field and Enum Value Conflict Detection** in Shared Range Mode
+  - Parses `fields { }` blocks in tables and tableextensions to extract field IDs, names, and data types
+  - Parses `value()` declarations in enums and enumextensions to extract value IDs and names
+  - Detects `extends` clauses to identify which base object is being extended
+  - Groups fields/values by base object and detects cross-project ID conflicts
+  - Displays field conflicts and enum value conflicts in the Used IDs tree view
+  - Critical for OnPrem scenarios where multiple apps extend the same base tables/enums
+
+### Technical Details
+
+- Added new types: `ALField`, `ALEnumValue`, `ALObjectWithFields`, `FieldConflict`, `EnumValueConflict`
+- Added Zod validation schemas: `ALFieldSchema`, `ALEnumValueSchema`, `ALObjectWithFieldsSchema`
+- Extended `ALObjectParser` with stateful field/value block parsing
+- Added `detectFieldConflicts()` and `detectEnumValueConflicts()` methods to `WorkspaceScanner`
+- Extended `UsedIdsTreeProvider` with new tree item types for field/value conflict display
+
 ## [0.5.1] - 2026-01-16
 
 ### Changed

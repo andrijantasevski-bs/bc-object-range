@@ -1,12 +1,14 @@
 import {
-  ALObject,
   ALObjectTypeWithId,
   AL_OBJECT_TYPES_WITH_ID,
+  ALField,
+  ALEnumValue,
+  ALObjectWithFields,
 } from "../types/index.js";
 
 /**
  * Parser for AL (Application Language) files in Business Central projects.
- * Extracts object declarations while properly handling comments.
+ * Extracts object declarations and their fields/values while properly handling comments.
  */
 export class ALObjectParser {
   /**
@@ -15,25 +17,51 @@ export class ALObjectParser {
    */
   private static readonly OBJECT_PATTERN = new RegExp(
     `^\\s*(${AL_OBJECT_TYPES_WITH_ID.join(
-      "|"
+      "|",
     )})\\s+(\\d+)\\s+(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))`,
-    "i"
+    "i",
   );
 
   /**
-   * Parse AL content and extract all object declarations.
+   * Regex pattern to match "extends" clause for extension objects.
+   * Captures: [1] quoted base object name or [2] unquoted base object name
+   */
+  private static readonly EXTENDS_PATTERN =
+    /extends\s+(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))/i;
+
+  /**
+   * Regex pattern to match field declarations inside tables/tableextensions.
+   * Captures: [1] field ID, [2] quoted name or [3] unquoted name, [4] data type
+   */
+  private static readonly FIELD_PATTERN =
+    /^\s*field\s*\(\s*(\d+)\s*;\s*(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))\s*;\s*([^)]+)\)/i;
+
+  /**
+   * Regex pattern to match enum value declarations inside enums/enumextensions.
+   * Captures: [1] ordinal ID, [2] quoted name or [3] unquoted name
+   */
+  private static readonly ENUM_VALUE_PATTERN =
+    /^\s*value\s*\(\s*(\d+)\s*;\s*(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))\s*\)/i;
+
+  /**
+   * Parse AL content and extract all object declarations with their fields/values.
    * Handles single-line (//) and multi-line comments.
    * Supports multiple objects defined in a single file.
    *
    * @param content The raw content of an AL file
    * @param filePath The absolute path to the AL file
-   * @returns Array of parsed AL objects
+   * @returns Array of parsed AL objects with fields/values
    */
-  public parseContent(content: string, filePath: string): ALObject[] {
-    const objects: ALObject[] = [];
+  public parseContent(content: string, filePath: string): ALObjectWithFields[] {
+    const objects: ALObjectWithFields[] = [];
     const lines = content.split(/\r?\n/);
 
     let inMultiLineComment = false;
+    let currentObject: ALObjectWithFields | null = null;
+    let braceDepth = 0;
+    let inFieldsBlock = false;
+    let fieldsBlockDepth = 0;
+    let expectingFieldsBlockBrace = false;
 
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
@@ -60,19 +88,124 @@ export class ALObjectParser {
       }
 
       // Try to match an object declaration
-      const match = ALObjectParser.OBJECT_PATTERN.exec(cleanedLine);
-      if (match) {
-        const objectType = match[1].toLowerCase() as ALObjectTypeWithId;
-        const objectId = parseInt(match[2], 10);
-        const objectName = match[3] || match[4]; // Quoted or unquoted name
+      const objectMatch = ALObjectParser.OBJECT_PATTERN.exec(cleanedLine);
+      if (objectMatch) {
+        const objectType = objectMatch[1].toLowerCase() as ALObjectTypeWithId;
+        const objectId = parseInt(objectMatch[2], 10);
+        const objectName = objectMatch[3] || objectMatch[4]; // Quoted or unquoted name
 
-        objects.push({
+        // Check for extends clause
+        let extendsObject: string | undefined;
+        const extendsMatch = ALObjectParser.EXTENDS_PATTERN.exec(cleanedLine);
+        if (extendsMatch) {
+          extendsObject = extendsMatch[1] || extendsMatch[2];
+        }
+
+        currentObject = {
           type: objectType,
           id: objectId,
           name: objectName,
           lineNumber,
           filePath,
-        });
+          extendsObject,
+          fields:
+            objectType === "table" || objectType === "tableextension"
+              ? []
+              : undefined,
+          enumValues:
+            objectType === "enum" || objectType === "enumextension"
+              ? []
+              : undefined,
+        };
+        objects.push(currentObject);
+        braceDepth = 0;
+        inFieldsBlock = false;
+        expectingFieldsBlockBrace = false;
+      }
+
+      // Track brace depth changes
+      const openBraces = (cleanedLine.match(/{/g) || []).length;
+      const closeBraces = (cleanedLine.match(/}/g) || []).length;
+      const netBraceChange = openBraces - closeBraces;
+
+      // If we're expecting a fields block brace and we see an open brace, enter fields block
+      if (expectingFieldsBlockBrace && openBraces > 0) {
+        inFieldsBlock = true;
+        fieldsBlockDepth = braceDepth + 1; // The depth at which fields block starts
+        expectingFieldsBlockBrace = false;
+      }
+
+      // Update brace depth
+      braceDepth += netBraceChange;
+
+      // Check for 'fields {' on same line (table/tableextension only)
+      if (
+        currentObject &&
+        (currentObject.type === "table" ||
+          currentObject.type === "tableextension") &&
+        !inFieldsBlock
+      ) {
+        if (/\bfields\s*\{/i.test(cleanedLine)) {
+          // 'fields {' on same line - we're now in fields block
+          inFieldsBlock = true;
+          fieldsBlockDepth = braceDepth; // Current depth after adding braces
+        } else if (/\bfields\s*$/i.test(cleanedLine)) {
+          // 'fields' keyword alone - expect { on next line
+          expectingFieldsBlockBrace = true;
+        }
+      }
+
+      // Parse field declarations if inside fields block of table/tableextension
+      if (
+        inFieldsBlock &&
+        currentObject &&
+        (currentObject.type === "table" ||
+          currentObject.type === "tableextension")
+      ) {
+        const fieldMatch = ALObjectParser.FIELD_PATTERN.exec(cleanedLine);
+        if (fieldMatch) {
+          const field: ALField = {
+            id: parseInt(fieldMatch[1], 10),
+            name: fieldMatch[2] || fieldMatch[3],
+            dataType: fieldMatch[4].trim(),
+            lineNumber,
+            filePath,
+          };
+          currentObject.fields!.push(field);
+        }
+      }
+
+      // Parse enum value declarations if inside enum/enumextension
+      if (
+        currentObject &&
+        (currentObject.type === "enum" ||
+          currentObject.type === "enumextension") &&
+        braceDepth > 0
+      ) {
+        const enumValueMatch =
+          ALObjectParser.ENUM_VALUE_PATTERN.exec(cleanedLine);
+        if (enumValueMatch) {
+          const enumValue: ALEnumValue = {
+            id: parseInt(enumValueMatch[1], 10),
+            name: enumValueMatch[2] || enumValueMatch[3],
+            lineNumber,
+            filePath,
+          };
+          currentObject.enumValues!.push(enumValue);
+        }
+      }
+
+      // Check if we exited the fields block
+      if (inFieldsBlock && braceDepth < fieldsBlockDepth) {
+        inFieldsBlock = false;
+      }
+
+      // Reset current object when we exit its scope
+      if (currentObject && braceDepth <= 0 && closeBraces > 0) {
+        currentObject = null;
+        braceDepth = 0;
+        inFieldsBlock = false;
+        expectingFieldsBlockBrace = false;
       }
     }
 
@@ -130,7 +263,7 @@ export class ALObjectParser {
    */
   public static isValidObjectType(type: string): type is ALObjectTypeWithId {
     return AL_OBJECT_TYPES_WITH_ID.includes(
-      type.toLowerCase() as ALObjectTypeWithId
+      type.toLowerCase() as ALObjectTypeWithId,
     );
   }
 

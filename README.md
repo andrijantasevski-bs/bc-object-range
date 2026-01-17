@@ -655,6 +655,85 @@ When two projects have objects with the same type AND same ID, the extension sho
 
 Objects involved in conflicts show a warning icon and tooltip explaining the conflict.
 
+### Field and Enum Value Conflict Detection
+
+In shared mode, the extension also detects conflicts within **tableextension fields** and **enumextension values**. This is crucial for OnPrem scenarios where multiple apps extend the same base table or enum.
+
+#### Why Field/Value Conflicts Matter
+
+In AL, when multiple apps extend the same base object:
+
+- **Tableextension fields**: Each field ID within extensions of the same base table must be unique across all apps
+- **Enumextension values**: Each value ID within extensions of the same base enum must be unique across all apps
+
+For example, if App1 and App2 both extend `"Customer"` table:
+
+- App1: `tableextension 50000 extends "Customer" { fields { field(50100; "Custom Field 1"; Text[50]) } }`
+- App2: `tableextension 50001 extends "Customer" { fields { field(50100; "Custom Field 2"; Text[50]) } }` ← **Conflict!**
+
+Both use field ID `50100` in extensions of the same base table — this will cause a runtime conflict.
+
+#### Field Conflicts View
+
+The extension detects and displays these conflicts in the Used IDs view:
+
+```
+⚠️ Field Conflicts (2 conflicts)
+├── ❌ field 50100 in "Customer" extensions
+│   ├── 📄 App1.CustomerExt (50000) → "Custom Field 1"
+│   └── 📄 App2.CustomerExt (50001) → "Custom Field 2"
+└── ❌ field 50200 in "Sales Header" extensions
+    ├── 📄 App1.SalesExt (50010) → "Extra Field"
+    └── 📄 App3.SalesExt (50011) → "Another Field"
+
+⚠️ Enum Value Conflicts (1 conflict)
+└── ❌ value 5 in "Sales Document Type" extensions
+    ├── 📄 App1.DocTypeExt (50000) → "Custom Type 1"
+    └── 📄 App2.DocTypeExt (50001) → "Custom Type 2"
+```
+
+#### How It Works
+
+1. **Field Parsing**: The extension parses `fields { }` blocks in tables and tableextensions to extract field IDs, names, and data types
+2. **Value Parsing**: The extension parses `value()` declarations in enums and enumextensions to extract value IDs and names
+3. **Extends Detection**: For tableextensions and enumextensions, the extension detects which base object is being extended (e.g., `extends "Customer"`)
+4. **Cross-Project Analysis**: Fields and values are grouped by `baseObject:fieldId` or `baseEnum:valueId`
+5. **Conflict Detection**: A conflict is flagged when the same ID is used in extensions from different projects that extend the same base object
+
+#### Supported Declarations
+
+**Table/Tableextension fields:**
+
+```al
+table 50000 "My Table" {
+    fields {
+        field(1; "Primary Key"; Code[20]) { }
+        field(50100; "Custom Field"; Text[100]) { }
+    }
+}
+
+tableextension 50000 "Customer Ext" extends "Customer" {
+    fields {
+        field(50100; "Custom Field"; Text[100]) { }
+    }
+}
+```
+
+**Enum/Enumextension values:**
+
+```al
+enum 50000 "My Enum" {
+    value(0; "None") { }
+    value(1; "Option A") { }
+}
+
+enumextension 50000 "Doc Type Ext" extends "Sales Document Type" {
+    value(50; "Custom Document") { }
+}
+```
+
+> **Note:** Field and enum value conflict detection is only active in **Shared Range Mode** (`bcObjectRange.sharedRangeMode: true`).
+
 ### Copy Next ID (Shared Mode)
 
 When you run the "Copy Next Available ID" command in shared mode:

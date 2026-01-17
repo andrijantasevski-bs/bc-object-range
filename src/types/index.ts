@@ -146,3 +146,83 @@ export interface IdConflict {
   /** Objects from different projects using this ID */
   objects: ALObject[];
 }
+
+/**
+ * Represents a field declaration inside a table or tableextension
+ */
+export interface ALField {
+  /** The numeric ID of the field */
+  id: number;
+  /** The name of the field */
+  name: string;
+  /** The data type of the field */
+  dataType: string;
+  /** The line number where the field is declared (1-based) */
+  lineNumber: number;
+  /** The absolute file path where the field is defined */
+  filePath: string;
+}
+
+/**
+ * Represents an enum value declaration inside an enum or enumextension
+ */
+export interface ALEnumValue {
+  /** The ordinal ID of the enum value */
+  id: number;
+  /** The name of the enum value */
+  name: string;
+  /** The line number where the value is declared (1-based) */
+  lineNumber: number;
+  /** The absolute file path where the value is defined */
+  filePath: string;
+}
+
+/**
+ * Extended AL object that includes fields (for table/tableextension) or values (for enum/enumextension)
+ */
+export interface ALObjectWithFields extends ALObject {
+  /** For tableextension/enumextension: the name of the base object being extended */
+  extendsObject?: string;
+  /** Fields declared in this object (for table/tableextension) */
+  fields?: ALField[];
+  /** Values declared in this object (for enum/enumextension) */
+  enumValues?: ALEnumValue[];
+}
+
+/**
+ * Represents a field ID conflict where the same field ID is used in multiple
+ * tableextensions extending the same base table
+ */
+export interface FieldConflict {
+  /** The conflicting field ID */
+  fieldId: number;
+  /** The name of the base table being extended */
+  baseTable: string;
+  /** The fields from different extensions using this ID */
+  fields: Array<
+    ALField & {
+      projectName: string;
+      extensionId: number;
+      extensionName: string;
+    }
+  >;
+}
+
+/**
+ * Represents an enum value ID conflict where the same ordinal ID is used in multiple
+ * enumextensions extending the same base enum
+ */
+export interface EnumValueConflict {
+  /** The conflicting enum value ID */
+  valueId: number;
+  /** The name of the base enum being extended */
+  baseEnum: string;
+  /** The values from different extensions using this ID */
+  values: Array<
+    ALEnumValue & {
+      projectName: string;
+      extensionId: number;
+      extensionName: string;
+    }
+  >;
+}
